@@ -1,6 +1,5 @@
 import streamlit as st
 
-
 def check_login():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
@@ -10,11 +9,9 @@ def check_login():
 
     credentials = st.secrets["credentials"]
 
+    st.set_page_config(page_title="Login", page_icon=":lock:", layout="centered")
+
     col1, col2, col3 = st.columns(3)
-    col3.image(
-        "https://www.ufm.edu/wp-content/uploads/2023/04/logo-ufm01.png",
-        width=180
-    )
 
     col1.markdown(
         "<h2 style='text-align: center;'>Sistema ERP</h2>",
