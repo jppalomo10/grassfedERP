@@ -2,14 +2,16 @@
 import streamlit as st
 import pandas as pd
 from db import run_query
-from auth import check_login
+from auth import check_login, role_badge, get_role
 
 # Configuración de la página
 if not check_login():
     st.stop()
 
+st.sidebar.markdown(f"**{st.session_state.user}** · {role_badge()}")
 if st.sidebar.button("Cerrar Sesión"):
-    st.session_state.authenticated = False
+    for key in ["authenticated", "user", "role"]:
+        st.session_state.pop(key, None)
     st.rerun()
 
 st.set_page_config(
