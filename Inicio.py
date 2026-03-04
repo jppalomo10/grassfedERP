@@ -4,7 +4,13 @@ import pandas as pd
 from db import run_query
 from auth import check_login, role_badge, get_role
 
-# Configuración de la página
+st.set_page_config(
+    page_title="Sistema ERP",
+    page_icon="🏠",
+    layout="wide"
+)
+
+# Autenticación
 if not check_login():
     st.stop()
 
@@ -13,12 +19,6 @@ if st.sidebar.button("Cerrar Sesión"):
     for key in ["authenticated", "user", "role"]:
         st.session_state.pop(key, None)
     st.rerun()
-
-st.set_page_config(
-    page_title="Sistema ERP",
-    page_icon=":data:",
-    layout="wide"
-)
 
 col1, col2 = st.columns(2)
 

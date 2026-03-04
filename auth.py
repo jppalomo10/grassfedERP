@@ -12,10 +12,21 @@ def check_login():
     if st.session_state.authenticated:
         return True
 
+    st.set_page_config(page_title="Login", page_icon="🔒", layout="centered")
+
+    # Ocultar sidebar en la pantalla de login
+    st.markdown(
+        """
+        <style>
+            [data-testid="stSidebar"] { display: none; }
+            [data-testid="stSidebarCollapsedControl"] { display: none; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     credentials = st.secrets["credentials"]
     roles = st.secrets["roles"]
-
-    st.set_page_config(page_title="Login", page_icon="🔒", layout="centered")
 
     st.title("Sistema ERP")
 

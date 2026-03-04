@@ -1,0 +1,308 @@
+import streamlit as st
+import pandas as pd
+from datetime import date
+from decimal import Decimal
+from db import run_query
+from auth import check_login, role_badge
+
+# ── Configuración de página ──────────────────────────────────────────
+st.set_page_config(
+    page_title="Registro de Pedidos",
+    page_icon="📋",
+    layout="wide",
+)
+
+# ── Autenticación ────────────────────────────────────────────────────
+if not check_login():
+    st.stop()
+
+st.sidebar.markdown(f"**{st.session_state.user}** · {role_badge()}")
+if st.sidebar.button("Cerrar Sesión"):
+    for key in ["authenticated", "user", "role"]:
+        st.session_state.pop(key, None)
+    st.rerun()
+
+# ── Inicializar estado ───────────────────────────────────────────────
+if "lineas" not in st.session_state:
+    st.session_state.lineas = []  # lista de dicts con las líneas de detalle
+
+# ── Helpers de datos ─────────────────────────────────────────────────
+@st.cache_data(ttl=120)
+def get_clientes():
+    """Devuelve DataFrame con todos los clientes."""
+    rows = run_query(
+        'SELECT "Teléfono", "Nombre", "Dirección" FROM "Clientes" ORDER BY "Nombre"'
+    )
+    return pd.DataFrame(rows) if rows else pd.DataFrame(
+        columns=["Teléfono", "Nombre", "Dirección"]
+    )
+
+
+@st.cache_data(ttl=120)
+def get_productos():
+    """Devuelve DataFrame con todos los productos."""
+    rows = run_query(
+        'SELECT "SKU", "Producto", "Precio" FROM "Productos" ORDER BY "Producto"'
+    )
+    return pd.DataFrame(rows) if rows else pd.DataFrame(
+        columns=["SKU", "Producto", "Precio"]
+    )
+
+
+def get_next_id_pedido():
+    """Obtiene el siguiente ID de pedido disponible."""
+    row = run_query(
+        'SELECT COALESCE(MAX("ID_Pedido"), 0) + 1 AS next_id FROM "Pedidos"',
+        fetch="one",
+    )
+    return row["next_id"]
+
+
+def insertar_pedido(id_pedido, fecha, cliente_tel, total, pago):
+    """Inserta un registro en la tabla Pedidos."""
+    run_query(
+        """
+        INSERT INTO "Pedidos" ("ID_Pedido", "Fecha", "Cliente", "Total", "Pago")
+        VALUES (%s, %s, %s, %s, %s)
+        """,
+        params=(id_pedido, fecha, cliente_tel, total, pago),
+        fetch="none",
+    )
+
+
+def insertar_detalle(id_pedido, sku, peso, precio, descuento, subtotal, cantidad):
+    """Inserta una línea en DetallePedido."""
+    run_query(
+        """
+        INSERT INTO "DetallePedido"
+            ("ID_Pedido", "SKU", "Peso", "Precio", "Descuento", "Subtotal", "Cantidad")
+        OVERRIDING SYSTEM VALUE
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """,
+        params=(id_pedido, sku, peso, precio, descuento, subtotal, cantidad),
+        fetch="none",
+    )
+
+
+def insertar_cliente(telefono, nombre, direccion):
+    """Inserta un nuevo cliente."""
+    run_query(
+        """
+        INSERT INTO "Clientes" ("Teléfono", "Nombre", "Dirección")
+        VALUES (%s, %s, %s)
+        """,
+        params=(telefono, nombre, direccion),
+        fetch="none",
+    )
+
+
+# ── Cargar catálogos ─────────────────────────────────────────────────
+df_clientes = get_clientes()
+df_productos = get_productos()
+
+# ── Título ───────────────────────────────────────────────────────────
+st.title("📋 Registro de Pedidos")
+st.markdown("---")
+
+# ══════════════════════════════════════════════════════════════════════
+# SECCIÓN 1 – DATOS DEL PEDIDO
+# ══════════════════════════════════════════════════════════════════════
+st.subheader("1️⃣  Datos del pedido")
+
+col_fecha, col_cliente, col_pago = st.columns([1, 2, 1])
+
+with col_fecha:
+    fecha = st.date_input("📅 Fecha", value=date.today())
+
+# ── Selector de cliente ──────────────────────────────────────────────
+with col_cliente:
+    modo_cliente = st.radio(
+        "Cliente",
+        ["Existente", "Nuevo"],
+        horizontal=True,
+        label_visibility="collapsed",
+    )
+
+if modo_cliente == "Existente":
+    with col_cliente:
+        if df_clientes.empty:
+            st.info("No hay clientes registrados. Registre uno nuevo.")
+            cliente_tel = None
+        else:
+            opciones = df_clientes.apply(
+                lambda r: f"{r['Nombre']}  ({r['Teléfono']})", axis=1
+            ).tolist()
+            seleccion = st.selectbox("Seleccionar cliente", opciones)
+            # Extraer teléfono del texto seleccionado
+            cliente_tel = seleccion.split("(")[-1].rstrip(")")
+else:
+    with col_cliente:
+        c1, c2 = st.columns(2)
+        nuevo_tel = c1.text_input("Teléfono *")
+        nuevo_nombre = c2.text_input("Nombre *")
+        nueva_dir = st.text_input("Dirección *")
+        cliente_tel = nuevo_tel  # se usará al guardar
+
+with col_pago:
+    metodo_pago = st.selectbox(
+        "💳 Método de pago",
+        ["Efectivo", "Transferencia", "Tarjeta"],
+    )
+
+st.markdown("---")
+
+# ══════════════════════════════════════════════════════════════════════
+# SECCIÓN 2 – AGREGAR LÍNEAS DE DETALLE
+# ══════════════════════════════════════════════════════════════════════
+st.subheader("2️⃣  Detalle del pedido")
+
+if df_productos.empty:
+    st.warning("No hay productos en el catálogo.")
+else:
+    with st.expander("➕ Agregar producto al pedido", expanded=True):
+        cp1, cp2, cp3, cp4 = st.columns([3, 1, 1, 1])
+
+        with cp1:
+            opciones_prod = df_productos.apply(
+                lambda r: f"{r['Producto']}  (SKU: {r['SKU']})", axis=1
+            ).tolist()
+            prod_sel = st.selectbox("Producto", opciones_prod, key="sel_prod")
+            sku_sel = prod_sel.split("SKU: ")[-1].rstrip(")")
+            precio_unitario = float(
+                df_productos.loc[
+                    df_productos["SKU"] == sku_sel, "Precio"
+                ].values[0]
+            )
+
+        with cp2:
+            cantidad = st.number_input("Cantidad", min_value=1, value=1, step=1, key="cant")
+
+        with cp3:
+            peso = st.number_input("Peso (lb)", min_value=0.0, value=1.0, step=0.25, format="%.2f", key="peso")
+
+        with cp4:
+            descuento = st.number_input(
+                "Descuento (%)", min_value=0.0, max_value=100.0,
+                value=0.0, step=1.0, format="%.1f", key="desc",
+            )
+
+        # Cálculo de subtotal en vivo
+        subtotal_linea = round(precio_unitario * cantidad * peso * (1 - descuento / 100), 2)
+        st.markdown(
+            f"**Precio unitario:** Q{precio_unitario:,.2f} &nbsp;|&nbsp; "
+            f"**Subtotal:** Q{subtotal_linea:,.2f}"
+        )
+
+        if st.button("➕ Agregar línea", type="primary"):
+            st.session_state.lineas.append(
+                {
+                    "SKU": sku_sel,
+                    "Producto": prod_sel.split("  (SKU")[0],
+                    "Cantidad": cantidad,
+                    "Peso (lb)": peso,
+                    "Precio": precio_unitario,
+                    "Descuento (%)": descuento,
+                    "Subtotal": subtotal_linea,
+                }
+            )
+            st.rerun()
+
+# ── Tabla de líneas agregadas ────────────────────────────────────────
+if st.session_state.lineas:
+    st.markdown("#### 🛒 Líneas del pedido")
+    df_lineas = pd.DataFrame(st.session_state.lineas)
+    st.dataframe(
+        df_lineas,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Precio": st.column_config.NumberColumn(format="Q%.2f"),
+            "Subtotal": st.column_config.NumberColumn(format="Q%.2f"),
+            "Descuento (%)": st.column_config.NumberColumn(format="%.1f%%"),
+            "Peso (lb)": st.column_config.NumberColumn(format="%.2f"),
+        },
+    )
+
+    # Botones para eliminar líneas
+    cols_del = st.columns(len(st.session_state.lineas))
+    for i, col in enumerate(cols_del):
+        with col:
+            if st.button(f"🗑️ Quitar #{i+1}", key=f"del_{i}"):
+                st.session_state.lineas.pop(i)
+                st.rerun()
+
+    total_pedido = sum(l["Subtotal"] for l in st.session_state.lineas)
+    st.markdown(f"### 💰 Total del pedido: **Q{total_pedido:,.2f}**")
+else:
+    st.info("Aún no ha agregado productos al pedido.")
+    total_pedido = 0
+
+st.markdown("---")
+
+# ══════════════════════════════════════════════════════════════════════
+# SECCIÓN 3 – GUARDAR PEDIDO
+# ══════════════════════════════════════════════════════════════════════
+st.subheader("3️⃣  Confirmar y guardar")
+
+col_guardar, col_limpiar = st.columns([1, 1])
+
+with col_guardar:
+    btn_guardar = st.button(
+        "✅ Guardar Pedido", type="primary", use_container_width=True,
+        disabled=(len(st.session_state.lineas) == 0),
+    )
+
+with col_limpiar:
+    if st.button("🧹 Limpiar formulario", use_container_width=True):
+        st.session_state.lineas = []
+        st.rerun()
+
+if btn_guardar:
+    # ── Validaciones ─────────────────────────────────────────────────
+    errores = []
+    if not cliente_tel:
+        errores.append("Debe seleccionar o registrar un cliente.")
+    if modo_cliente == "Nuevo" and (not nuevo_tel or not nuevo_nombre or not nueva_dir):
+        errores.append("Complete todos los campos del nuevo cliente (Teléfono, Nombre, Dirección).")
+    if not st.session_state.lineas:
+        errores.append("Agregue al menos una línea de detalle.")
+
+    if errores:
+        for e in errores:
+            st.error(e)
+    else:
+        try:
+            # 1. Si es cliente nuevo, insertarlo primero
+            if modo_cliente == "Nuevo":
+                insertar_cliente(nuevo_tel.strip(), nuevo_nombre.strip(), nueva_dir.strip())
+                get_clientes.clear()  # limpiar caché
+
+            # 2. Obtener siguiente ID
+            id_pedido = get_next_id_pedido()
+
+            # 3. Insertar pedido
+            insertar_pedido(
+                id_pedido, fecha, cliente_tel.strip(),
+                Decimal(str(total_pedido)), metodo_pago,
+            )
+
+            # 4. Insertar cada línea de detalle
+            for linea in st.session_state.lineas:
+                insertar_detalle(
+                    id_pedido,
+                    linea["SKU"],
+                    linea["Peso (lb)"],
+                    Decimal(str(linea["Precio"])),
+                    Decimal(str(linea["Descuento (%)"])),
+                    Decimal(str(linea["Subtotal"])),
+                    linea["Cantidad"],
+                )
+
+            st.success(f"✅ Pedido **#{id_pedido}** guardado exitosamente.")
+            st.balloons()
+
+            # Limpiar estado
+            st.session_state.lineas = []
+
+        except Exception as ex:
+            st.error(f"❌ Error al guardar: {ex}")
