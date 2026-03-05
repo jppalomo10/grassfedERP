@@ -109,45 +109,43 @@ st.markdown("---")
 # ══════════════════════════════════════════════════════════════════════
 st.subheader("1️⃣  Datos del pedido")
 
-col_fecha, col_cliente, col_pago = st.columns([1, 2, 1])
+col_fecha, col_pago = st.columns(2)
 
 with col_fecha:
     fecha = st.date_input("📅 Fecha", value=date.today())
-
-# ── Selector de cliente ──────────────────────────────────────────────
-with col_cliente:
-    modo_cliente = st.radio(
-        "Cliente",
-        ["Existente", "Nuevo"],
-        horizontal=True,
-        label_visibility="collapsed",
-    )
-
-if modo_cliente == "Existente":
-    with col_cliente:
-        if df_clientes.empty:
-            st.info("No hay clientes registrados. Registre uno nuevo.")
-            cliente_tel = None
-        else:
-            opciones = df_clientes.apply(
-                lambda r: f"{r['Nombre']}  ({r['Teléfono']})", axis=1
-            ).tolist()
-            seleccion = st.selectbox("Seleccionar cliente", opciones)
-            # Extraer teléfono del texto seleccionado
-            cliente_tel = seleccion.split("(")[-1].rstrip(")")
-else:
-    with col_cliente:
-        c1, c2 = st.columns(2)
-        nuevo_tel = c1.text_input("Teléfono *")
-        nuevo_nombre = c2.text_input("Nombre *")
-        nueva_dir = st.text_input("Dirección *")
-        cliente_tel = nuevo_tel  # se usará al guardar
 
 with col_pago:
     metodo_pago = st.selectbox(
         "💳 Método de pago",
         ["Efectivo", "Transferencia", "Tarjeta"],
     )
+
+# ── Selector de cliente ──────────────────────────────────────────────
+modo_cliente = st.radio(
+    "Cliente",
+    ["Existente", "Nuevo"],
+    horizontal=True,
+    label_visibility="collapsed",
+    )
+
+if modo_cliente == "Existente":
+    if df_clientes.empty:
+        st.info("No hay clientes registrados. Registre uno nuevo.")
+        cliente_tel = None
+    else:
+        opciones = df_clientes.apply(
+                lambda r: f"{r['Nombre']}  ({r['Teléfono']})", axis=1
+            ).tolist()
+        seleccion = st.selectbox("Seleccionar cliente", opciones)
+        # Extraer teléfono del texto seleccionado
+        cliente_tel = seleccion.split("(")[-1].rstrip(")")
+else:
+    c1, c2 = st.columns(2)
+    nuevo_tel = c1.text_input("Teléfono *")
+    nuevo_nombre = c2.text_input("Nombre *")
+    nueva_dir = st.text_input("Dirección *")
+    cliente_tel = nuevo_tel  # se usará al guardar
+    nuevo_nombre = nuevo_nombre.upper()
 
 st.markdown("---")
 
@@ -159,7 +157,7 @@ st.subheader("2️⃣  Detalle del pedido")
 if df_productos.empty:
     st.warning("No hay productos en el catálogo.")
 else:
-    with st.expander("➕ Agregar producto al pedido", expanded=True):
+    with st.expander("➕ Agregar producto al pedido", expanded=False):
         cp1, cp2, cp3, cp4 = st.columns([3, 1, 1, 1])
 
         with cp1:
@@ -182,12 +180,12 @@ else:
 
         with cp4:
             descuento = st.number_input(
-                "Descuento (%)", min_value=0.0, max_value=100.0,
+                "Descuento (Q)", min_value=0.0, max_value=100.0,
                 value=0.0, step=1.0, format="%.1f", key="desc",
             )
 
         # Cálculo de subtotal en vivo
-        subtotal_linea = round(precio_unitario * cantidad * peso * (1 - descuento / 100), 2)
+        subtotal_linea = round(precio_unitario * cantidad * peso  - descuento, 2)
         st.markdown(
             f"**Precio unitario:** Q{precio_unitario:,.2f} &nbsp;|&nbsp; "
             f"**Subtotal:** Q{subtotal_linea:,.2f}"
@@ -216,9 +214,9 @@ if st.session_state.lineas:
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Precio": st.column_config.NumberColumn(format="Q%.2f"),
-            "Subtotal": st.column_config.NumberColumn(format="Q%.2f"),
-            "Descuento (%)": st.column_config.NumberColumn(format="%.1f%%"),
+            "Precio (Q)": st.column_config.NumberColumn(format="Q%.2f"),
+            "Subtotal (Q)": st.column_config.NumberColumn(format="Q%.2f"),
+            "Descuento (Q)": st.column_config.NumberColumn(format="%.1f%%"),
             "Peso (lb)": st.column_config.NumberColumn(format="%.2f"),
         },
     )
@@ -237,14 +235,8 @@ else:
     st.info("Aún no ha agregado productos al pedido.")
     total_pedido = 0
 
-st.markdown("---")
-
-# ══════════════════════════════════════════════════════════════════════
-# SECCIÓN 3 – GUARDAR PEDIDO
-# ══════════════════════════════════════════════════════════════════════
-st.subheader("3️⃣  Confirmar y guardar")
-
-col_guardar, col_limpiar = st.columns([1, 1])
+# ── Botones ──────────────────────────────────────────────────────────
+col_guardar, col_limpiar = st.columns(2)
 
 with col_guardar:
     btn_guardar = st.button(
