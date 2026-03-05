@@ -61,14 +61,14 @@ def get_next_id_pedido():
     return row["next_id"]
 
 
-def insertar_pedido(id_pedido, fecha, cliente_tel, total, pago):
+def insertar_pedido(id_pedido, fecha, cliente_tel, total, pago, envio):
     """Inserta un registro en la tabla Pedidos."""
     run_query(
         """
-        INSERT INTO "Pedidos" ("ID_Pedido", "Fecha", "Cliente", "Total", "Pago")
-        VALUES (%s, %s, %s, %s, %s)
+        INSERT INTO "Pedidos" ("ID_Pedido", "Fecha", "Cliente", "Total", "Pago", "Envío")
+        VALUES (%s, %s, %s, %s, %s, %s)
         """,
-        params=(id_pedido, fecha, cliente_tel, total, pago),
+        params=(id_pedido, fecha, cliente_tel, total, pago, envio),
         fetch="none",
     )
 
@@ -247,14 +247,22 @@ with col_pago:
         ["Efectivo", "Transferencia", "Tarjeta"],
     )
 
-# ── Selector de cliente ──────────────────────────────────────────────
-modo_cliente = st.radio(
+col_envio, col_modo = st.columns(2)
+
+with col_envio:
+    envio = st.selectbox(
+        "📦 Envío",
+        ["Metropolitano", "Antigua Guatemala", "CAES"],
+    )
+
+with col_modo:
+    modo_cliente = st.radio(
     "Cliente",
     ["Existente", "Nuevo"],
     horizontal=True,
     label_visibility="collapsed",
     )
-
+# ── Selector de cliente ──────────────────────────────────────────────
 if modo_cliente == "Existente":
     if df_clientes.empty:
         st.info("No hay clientes registrados. Registre uno nuevo.")
@@ -378,13 +386,14 @@ with col_limpiar:
 
 with col_pdf:
     id_pedido = get_next_id_pedido()
+    cliente_nombre = df_clientes.loc[df_clientes["Teléfono"] == cliente_tel, "Nombre"].iloc[0].replace(" ", "")
     st.download_button(
         label="📄 Descargar Factura PDF",
         data=generar_factura_pdf(id_pedido, fecha, 
-                        df_clientes.loc[df_clientes["Teléfono"] == cliente_tel, "Nombre"].iloc[0],
+                        cliente_nombre,
                         cliente_tel,
                         df_clientes.loc[df_clientes["Teléfono"] == cliente_tel, "Dirección"].iloc[0], metodo_pago, st.session_state.lineas, total_pedido),
-        file_name=f"Factura_{id_pedido}.pdf",
+        file_name=f"Factura_{id_pedido}_{cliente_nombre}.pdf",
         mime="application/pdf",
         type="primary",
         use_container_width=True,
@@ -416,7 +425,7 @@ if btn_guardar:
             # 3. Insertar pedido
             insertar_pedido(
                 id_pedido, fecha, cliente_tel.strip(),
-                Decimal(str(total_pedido)), metodo_pago,
+                Decimal(str(total_pedido)), metodo_pago, envio  
             )
 
             # 4. Insertar cada línea de detalle
