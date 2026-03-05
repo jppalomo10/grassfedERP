@@ -100,7 +100,7 @@ def insertar_cliente(telefono, nombre, direccion):
 
 
 def generar_factura_pdf(id_pedido, fecha, cliente_nombre, cliente_tel,
-                        cliente_dir, metodo_pago, lineas, total):
+                        cliente_dir, metodo_pago, lineas, total, envio):
     """Genera un PDF tipo factura y devuelve los bytes."""
 
     # ── Colores de marca ─────────────────────────────────────────────
@@ -203,11 +203,19 @@ def generar_factura_pdf(id_pedido, fecha, cliente_nombre, cliente_tel,
     pdf.line(pdf.l_margin, pdf.get_y(), pdf.l_margin + page_w, pdf.get_y())
     pdf.ln(3)
 
+    # Costo de envío
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(page_w - col_w[-1], 9, "ENVÍO:", align="R")
+    pdf.set_fill_color(*BLANCO)
+    pdf.set_text_color(0)
+    pdf.cell(col_w[-1], 9, f"Q{costos_envio[envio]:,.2f}", align="R", fill=True)
+    pdf.ln(12)
+
     # Total
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(page_w - col_w[-1], 9, "TOTAL:", align="R")
-    pdf.set_fill_color(*VERDE)
-    pdf.set_text_color(*BLANCO)
+    pdf.set_fill_color(*BLANCO)
+    pdf.set_text_color(0)
     pdf.cell(col_w[-1], 9, f"Q{total:,.2f}", align="R", fill=True)
     pdf.ln(12)
 
@@ -221,6 +229,8 @@ def generar_factura_pdf(id_pedido, fecha, cliente_nombre, cliente_tel,
     buf.write(pdf.output())
     buf.seek(0)
     return buf
+
+costos_envio = {"Metropolitano": 35, "Antigua Guatemala": 25, "CAES": 25}
 
 
 # ── Cargar catálogos ─────────────────────────────────────────────────
@@ -356,6 +366,7 @@ if st.session_state.lineas:
         },
     )
 
+
     # Botones para eliminar líneas
     cols_del = st.columns(len(st.session_state.lineas))
     for i, col in enumerate(cols_del):
@@ -364,7 +375,9 @@ if st.session_state.lineas:
                 st.session_state.lineas.pop(i)
                 st.rerun()
 
-    total_pedido = sum(l["Subtotal"] for l in st.session_state.lineas)
+    st.markdown(f"Costo de envío: **Q{costos_envio[envio]:,.2f}**")
+
+    total_pedido = sum(l["Subtotal"] for l in st.session_state.lineas) + costos_envio[envio]
     st.markdown(f"### 💰 Total del pedido: **Q{total_pedido:,.2f}**")
 else:
     st.info("Aún no ha agregado productos al pedido.")
@@ -392,7 +405,7 @@ with col_pdf:
         data=generar_factura_pdf(id_pedido, fecha, 
                         cliente_nombre,
                         cliente_tel,
-                        df_clientes.loc[df_clientes["Teléfono"] == cliente_tel, "Dirección"].iloc[0], metodo_pago, st.session_state.lineas, total_pedido),
+                        df_clientes.loc[df_clientes["Teléfono"] == cliente_tel, "Dirección"].iloc[0], metodo_pago, st.session_state.lineas, total_pedido, envio),
         file_name=f"Factura_{id_pedido}_{cliente_nombre}.pdf",
         mime="application/pdf",
         type="primary",
