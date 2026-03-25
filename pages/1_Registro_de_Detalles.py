@@ -136,7 +136,6 @@ with col_modo:
     "Cliente",
     ["Existente", "Nuevo"],
     horizontal=True,
-    label_visibility="collapsed",
     )
 # ── Selector de cliente ──────────────────────────────────────────────
 if modo_cliente == "Existente":
