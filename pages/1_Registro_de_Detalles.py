@@ -86,14 +86,14 @@ def insertar_detalle(id_pedido, sku, peso, precio, descuento, subtotal, cantidad
     )
 
 
-def insertar_cliente(telefono, nombre, direccion):
+def insertar_cliente(telefono, nombre, direccion, nit):
     """Inserta un nuevo cliente."""
     run_query(
         """
-        INSERT INTO "Clientes" ("Teléfono", "Nombre", "Dirección")
-        VALUES (%s, %s, %s)
+        INSERT INTO "Clientes" ("Teléfono", "Nombre", "Dirección", "NIT")
+        VALUES (%s, %s, %s, %s)
         """,
-        params=(telefono, nombre, direccion),
+        params=(telefono, nombre, direccion, nit),
         fetch="none",
     )
 
@@ -152,7 +152,8 @@ if modo_cliente == "Existente":
 else:
     c1, c2 = st.columns(2)
     nuevo_tel = c1.text_input("Teléfono *")
-    nuevo_nombre = c2.text_input("Nombre *")
+    nuevo_nit = c2.text_input("NIT")
+    nuevo_nombre = st.text_input("Nombre *")
     nueva_dir = st.text_input("Dirección *")
     cliente_tel = nuevo_tel  # se usará al guardar
     nuevo_nombre = nuevo_nombre.upper()

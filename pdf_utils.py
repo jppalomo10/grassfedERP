@@ -10,7 +10,7 @@ from reportlab.platypus import Table, TableStyle
 from reportlab.pdfgen import canvas
 
 
-costos_envio = {"Metropolitano": 35, "Antigua Guatemala": 25, "CAES": 25}
+costos_envio = {"Ciudad": 30, "Antigua Guatemala": 80, "Metropolitano": 40}
 
 
 def generar_factura_pdf(id_pedido, fecha, cliente_nombre, cliente_tel,
