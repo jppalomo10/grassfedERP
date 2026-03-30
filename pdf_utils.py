@@ -15,7 +15,8 @@ costos_envio = {"Ciudad": 30, "Antigua Guatemala": 80, "Metropolitano": 40}
 
 
 def generar_factura_pdf(id_pedido, fecha, cliente_nombre, cliente_tel,
-                        cliente_dir, metodo_pago, lineas, total, envio):
+                        cliente_dir, metodo_pago, lineas, total, envio,
+                        cliente_nit="C/F"):
     """Genera un PDF tipo factura con ReportLab y devuelve un BytesIO."""
 
     # ── Colores de marca ─────────────────────────────────────────────
@@ -62,8 +63,8 @@ def generar_factura_pdf(id_pedido, fecha, cliente_nombre, cliente_tel,
     c.line(MARGIN, y, PAGE_W - MARGIN, y)
     y -= 18
 
-    info_labels = ["Nombre:", "Telefono:", "Direccion:"]
-    info_values = [str(cliente_nombre), str(cliente_tel), str(cliente_dir)]
+    info_labels = ["Nombre:", "Telefono:", "NIT:", "Direccion:"]
+    info_values = [str(cliente_nombre), str(cliente_tel), str(cliente_nit or "C/F"), str(cliente_dir)]
     for lab, val in zip(info_labels, info_values):
         c.setFont("Helvetica-Bold", 10)
         c.drawString(MARGIN, y, lab)

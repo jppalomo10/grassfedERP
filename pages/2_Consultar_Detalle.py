@@ -29,10 +29,10 @@ if st.sidebar.button("Cerrar Sesión", key="logout_consulta"):
 @st.cache_data(ttl=60)
 def get_clientes():
     rows = run_query(
-        'SELECT "Teléfono", "Nombre", "Dirección" FROM "Clientes" ORDER BY "Nombre"'
+        'SELECT "Teléfono", "Nombre", "Dirección", COALESCE("NIT", \'C/F\') AS "NIT" FROM "Clientes" ORDER BY "Nombre"'
     )
     return pd.DataFrame(rows) if rows else pd.DataFrame(
-        columns=["Teléfono", "Nombre", "Dirección"]
+        columns=["Teléfono", "Nombre", "Dirección", "NIT"]
     )
 
 
@@ -88,6 +88,15 @@ def actualizar_entregado(id_pedido, entregado):
     )
 
 
+def actualizar_pago(id_pedido, nuevo_pago):
+    """Actualiza el método de pago de un pedido."""
+    run_query(
+        'UPDATE "Pedidos" SET "Pago" = %s WHERE "ID_Pedido" = %s',
+        params=(nuevo_pago, id_pedido),
+        fetch="none",
+    )
+
+
 # ══════════════════════════════════════════════════════════════════════
 # SIDEBAR – BÚSQUEDA POR CLIENTE
 # ══════════════════════════════════════════════════════════════════════
@@ -116,6 +125,9 @@ cliente_nombre = df_clientes.loc[
 ].iloc[0]
 cliente_dir = df_clientes.loc[
     df_clientes["Teléfono"] == cliente_tel, "Dirección"
+].iloc[0]
+cliente_nit = df_clientes.loc[
+    df_clientes["Teléfono"] == cliente_tel, "NIT"
 ].iloc[0]
 
 # Obtener pedidos del cliente
@@ -209,7 +221,7 @@ st.divider()
 # ══════════════════════════════════════════════════════════════════════
 st.subheader("✏️ Actualizar Pedido")
 
-col_estado, col_entrega = st.columns(2)
+col_estado, col_entrega, col_pago = st.columns(3)
 
 estados_opciones = ["Pendiente de Pago", "Pagado", "Anulado"]
 estado_actual = pedido["Estado"]
@@ -234,20 +246,35 @@ with col_entrega:
         key=f"entregado_{factura_sel}",
     )
 
+pago_opciones = ["Efectivo", "Transferencia", "Tarjeta"]
+pago_actual = pedido["Pago"]
+idx_pago = pago_opciones.index(pago_actual) if pago_actual in pago_opciones else 0
+
+with col_pago:
+    nuevo_pago = st.selectbox(
+        "💳 Método de pago",
+        pago_opciones,
+        index=idx_pago,
+        key=f"pago_{factura_sel}",
+    )
+
 # Detectar si hubo cambios
 cambio_estado = nuevo_estado != estado_actual
 cambio_entrega = nuevo_entregado != entregado_actual
+cambio_pago = nuevo_pago != pago_actual
 
 col_btn_update, col_btn_pdf = st.columns(2)
 
 with col_btn_update:
-    if cambio_estado or cambio_entrega:
+    if cambio_estado or cambio_entrega or cambio_pago:
         if st.button("💾 Guardar cambios", type="primary", use_container_width=True):
             try:
                 if cambio_estado:
                     actualizar_estado(factura_sel, nuevo_estado)
                 if cambio_entrega:
                     actualizar_entregado(factura_sel, nuevo_entregado)
+                if cambio_pago:
+                    actualizar_pago(factura_sel, nuevo_pago)
 
                 st.success("✅ Pedido actualizado exitosamente.")
                 st.rerun()
@@ -290,10 +317,11 @@ with col_btn_pdf:
             cliente_nombre=cliente_nombre,
             cliente_tel=cliente_tel,
             cliente_dir=cliente_dir,
-            metodo_pago=pedido["Pago"],
+            metodo_pago=nuevo_pago,
             lineas=lineas_pdf,
             total=float(pedido["Total"]),
             envio=pedido["Envío"],
+            cliente_nit=cliente_nit,
         )
 
         nombre_archivo = cliente_nombre.replace(" ", "")

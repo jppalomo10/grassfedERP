@@ -33,10 +33,10 @@ if "lineas" not in st.session_state:
 def get_clientes():
     """Devuelve DataFrame con todos los clientes."""
     rows = run_query(
-        'SELECT "Teléfono", "Nombre", "Dirección" FROM "Clientes" ORDER BY "Nombre"'
+        'SELECT "Teléfono", "Nombre", "Dirección", COALESCE("NIT", \'C/F\') AS "NIT" FROM "Clientes" ORDER BY "Nombre"'
     )
     return pd.DataFrame(rows) if rows else pd.DataFrame(
-        columns=["Teléfono", "Nombre", "Dirección"]
+        columns=["Teléfono", "Nombre", "Dirección", "NIT"]
     )
 
 
@@ -266,21 +266,25 @@ with col_limpiar:
 with col_pdf:
     id_pedido = get_next_id_pedido()
 
-    # Obtener nombre y dirección según el modo de cliente
+    # Obtener nombre, dirección y NIT según el modo de cliente
     if modo_cliente == "Existente" and cliente_tel:
         match = df_clientes.loc[df_clientes["Teléfono"] == cliente_tel]
         if not match.empty:
             cliente_nombre = match["Nombre"].iloc[0].replace(" ", "")
             cliente_dir = match["Dirección"].iloc[0]
+            cliente_nit = match["NIT"].iloc[0]
         else:
             cliente_nombre = None
             cliente_dir = None
+            cliente_nit = "C/F"
     elif modo_cliente == "Nuevo" and nuevo_nombre:
         cliente_nombre = nuevo_nombre.strip().replace(" ", "")
         cliente_dir = nueva_dir.strip() if nueva_dir else ""
+        cliente_nit = nuevo_nit.strip() if nuevo_nit else "C/F"
     else:
         cliente_nombre = None
         cliente_dir = None
+        cliente_nit = "C/F"
 
     if cliente_nombre and st.session_state.lineas:
         st.download_button(
@@ -291,6 +295,7 @@ with col_pdf:
                 cliente_tel,
                 cliente_dir, metodo_pago,
                 st.session_state.lineas, total_pedido, envio,
+                cliente_nit=cliente_nit,
             ),
             file_name=f"Factura_{id_pedido}_{cliente_nombre}.pdf",
             mime="application/pdf",
