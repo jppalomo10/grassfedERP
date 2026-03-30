@@ -128,7 +128,7 @@ col_envio, col_modo = st.columns(2)
 with col_envio:
     envio = st.selectbox(
         "📦 Envío",
-        ["Metropolitano", "Antigua Guatemala", "CAES"],
+        ["Ciudad", "Antigua Guatemala", "Metropolitano"],
     )
 
 with col_modo:
@@ -152,7 +152,7 @@ if modo_cliente == "Existente":
 else:
     c1, c2 = st.columns(2)
     nuevo_tel = c1.text_input("Teléfono *")
-    nuevo_nit = c2.text_input("NIT")
+    nuevo_nit = c2.text_input("NIT *")
     nuevo_nombre = st.text_input("Nombre *")
     nueva_dir = st.text_input("Dirección *")
     cliente_tel = nuevo_tel  # se usará al guardar
@@ -168,7 +168,7 @@ st.subheader("Detalle del pedido")
 if df_productos.empty:
     st.warning("No hay productos en el catálogo.")
 else:
-    with st.expander("➕ Agregar producto al pedido", expanded=False):
+    with st.expander("➕ Agregar producto al pedido", expanded=True):
         cp1, cp2, cp3, cp4 = st.columns([3, 1, 1, 1])
 
         with cp1:
@@ -196,7 +196,7 @@ else:
             )
 
         # Cálculo de subtotal en vivo
-        subtotal_linea = round(precio_unitario * cantidad * peso  - descuento, 2)
+        subtotal_linea = round(precio_unitario * peso  - descuento, 2)
         st.markdown(
             f"**Precio unitario:** Q{precio_unitario:,.2f} &nbsp;|&nbsp; "
             f"**Subtotal:** Q{subtotal_linea:,.2f}"
@@ -265,18 +265,44 @@ with col_limpiar:
 
 with col_pdf:
     id_pedido = get_next_id_pedido()
-    cliente_nombre = df_clientes.loc[df_clientes["Teléfono"] == cliente_tel, "Nombre"].iloc[0].replace(" ", "")
-    st.download_button(
-        label="📄 Descargar Factura PDF",
-        data=generar_factura_pdf(id_pedido, fecha, 
-                        cliente_nombre,
-                        cliente_tel,
-                        df_clientes.loc[df_clientes["Teléfono"] == cliente_tel, "Dirección"].iloc[0], metodo_pago, st.session_state.lineas, total_pedido, envio),
-        file_name=f"Factura_{id_pedido}_{cliente_nombre}.pdf",
-        mime="application/pdf",
-        type="primary",
-        use_container_width=True,
-    )
+
+    # Obtener nombre y dirección según el modo de cliente
+    if modo_cliente == "Existente" and cliente_tel:
+        match = df_clientes.loc[df_clientes["Teléfono"] == cliente_tel]
+        if not match.empty:
+            cliente_nombre = match["Nombre"].iloc[0].replace(" ", "")
+            cliente_dir = match["Dirección"].iloc[0]
+        else:
+            cliente_nombre = None
+            cliente_dir = None
+    elif modo_cliente == "Nuevo" and nuevo_nombre:
+        cliente_nombre = nuevo_nombre.strip().replace(" ", "")
+        cliente_dir = nueva_dir.strip() if nueva_dir else ""
+    else:
+        cliente_nombre = None
+        cliente_dir = None
+
+    if cliente_nombre and st.session_state.lineas:
+        st.download_button(
+            label="📄 Descargar Factura PDF",
+            data=generar_factura_pdf(
+                id_pedido, fecha,
+                cliente_nombre,
+                cliente_tel,
+                cliente_dir, metodo_pago,
+                st.session_state.lineas, total_pedido, envio,
+            ),
+            file_name=f"Factura_{id_pedido}_{cliente_nombre}.pdf",
+            mime="application/pdf",
+            type="primary",
+            use_container_width=True,
+        )
+    else:
+        st.button(
+            "📄 Descargar Factura PDF",
+            disabled=True,
+            use_container_width=True,
+        )
 
 if btn_guardar:
     # ── Validaciones ─────────────────────────────────────────────────
@@ -295,7 +321,7 @@ if btn_guardar:
         try:
             # 1. Si es cliente nuevo, insertarlo primero
             if modo_cliente == "Nuevo":
-                insertar_cliente(nuevo_tel.strip(), nuevo_nombre.strip(), nueva_dir.strip())
+                insertar_cliente(nuevo_tel.strip(), nuevo_nombre.strip(), nueva_dir.strip(), nuevo_nit.strip())
                 get_clientes.clear()  # limpiar caché
 
             # 2. Obtener siguiente ID

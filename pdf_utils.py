@@ -4,9 +4,10 @@ Módulo compartido entre las páginas de Streamlit.
 """
 
 from io import BytesIO
-from reportlab.lib.pagesizes import LETTER
+from reportlab.lib.pagesizes import LETTER, landscape
 from reportlab.lib.colors import Color, white
-from reportlab.platypus import Table, TableStyle
+from reportlab.platypus import Table, TableStyle, Paragraph
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfgen import canvas
 
 
@@ -171,3 +172,123 @@ def generar_factura_pdf(id_pedido, fecha, cliente_nombre, cliente_tel,
     c.save()
     buf.seek(0)
     return buf
+
+
+def generar_rutas_envio_pdf(pedidos):
+    """
+    Genera un PDF con la hoja de rutas de envío.
+
+    `pedidos` debe ser una lista de dicts con las claves:
+    ID_Pedido, Cliente, Teléfono, Dirección, Peso_Total, Envío.
+    """
+    from datetime import date as _date
+
+    VERDE = Color(84 / 255, 98 / 255, 50 / 255)
+    MARRON = Color(26 / 255, 21 / 255, 16 / 255)
+    GRIS_CLARO = Color(245 / 255, 240 / 255, 233 / 255)
+    GRIS_TEXTO = Color(140 / 255, 140 / 255, 140 / 255)
+
+    PAGE_W, PAGE_H = landscape(LETTER)  # horizontal
+    MARGIN = 40
+    usable_w = PAGE_W - 2 * MARGIN
+
+    # Estilos para celdas con texto largo
+    cell_style = ParagraphStyle(
+        "cell", fontName="Helvetica", fontSize=9,
+        leading=11, textColor=MARRON,
+    )
+
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=landscape(LETTER))
+
+    # ── Encabezado ────────────────────────────────────────────────────
+    header_h = 90
+    c.setFillColor(VERDE)
+    c.rect(0, PAGE_H - header_h, PAGE_W, header_h, fill=1, stroke=0)
+
+    c.setFillColor(white)
+    c.setFont("Helvetica-Bold", 22)
+    c.drawString(MARGIN, PAGE_H - 40, "GrassFed GT")
+    c.setFont("Helvetica", 14)
+    c.drawString(MARGIN, PAGE_H - 62, "Hoja de Rutas de Envío")
+
+    right_x = PAGE_W - MARGIN
+    c.setFont("Helvetica", 11)
+    c.drawRightString(right_x, PAGE_H - 40, f"Fecha: {_date.today().strftime('%d/%m/%Y')}")
+    c.drawRightString(right_x, PAGE_H - 56, f"Pedidos: {len(pedidos)}")
+
+    y = PAGE_H - header_h - 30
+
+    # ── Tabla ─────────────────────────────────────────────────────────
+    headers = ["#", "Cliente", "Teléfono", "Dirección", "Peso (lb)", "Envío"]
+    table_data = [headers]
+
+    for idx, p in enumerate(pedidos, 1):
+        table_data.append([
+            str(idx),
+            Paragraph(str(p["Cliente"]), cell_style),
+            str(p["Teléfono"]),
+            Paragraph(str(p["Dirección"]), cell_style),
+            f"{p['Peso_Total']:.2f}",
+            str(p["Envío"]),
+        ])
+
+    col_widths = [
+        usable_w * 0.05,   # #
+        usable_w * 0.20,   # Cliente
+        usable_w * 0.13,   # Teléfono
+        usable_w * 0.37,   # Dirección (más espacio)
+        usable_w * 0.10,   # Peso
+        usable_w * 0.15,   # Envío
+    ]
+
+    table = Table(table_data, colWidths=col_widths)
+
+    style_cmds = [
+        ('BACKGROUND', (0, 0), (-1, 0), VERDE),
+        ('TEXTCOLOR', (0, 0), (-1, 0), white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+        ('ALIGN', (4, 0), (4, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 9),
+        ('TEXTCOLOR', (0, 1), (-1, -1), MARRON),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+        ('TOPPADDING', (0, 0), (-1, 0), 6),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 5),
+        ('TOPPADDING', (0, 1), (-1, -1), 5),
+        ('LINEBELOW', (0, -1), (-1, -1), 1.5, VERDE),
+    ]
+
+    for i in range(1, len(table_data)):
+        if i % 2 == 0:
+            style_cmds.append(('BACKGROUND', (0, i), (-1, i), GRIS_CLARO))
+
+    table.setStyle(TableStyle(style_cmds))
+
+    tw, th = table.wrap(usable_w, y)
+    table.drawOn(c, MARGIN, y - th)
+    y = y - th - 20
+
+    # ── Peso total general ────────────────────────────────────────────
+    peso_total = sum(p["Peso_Total"] for p in pedidos)
+    c.setFillColor(MARRON)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawRightString(PAGE_W - MARGIN - 80, y, "PESO TOTAL:")
+    c.setFont("Helvetica-Bold", 12)
+    c.drawRightString(PAGE_W - MARGIN, y, f"{peso_total:,.2f} lb")
+
+    # ── Pie de página ─────────────────────────────────────────────────
+    c.setFillColor(GRIS_TEXTO)
+    c.setFont("Helvetica-Oblique", 8)
+    c.drawCentredString(
+        PAGE_W / 2, MARGIN - 10,
+        "GrassFed GT  |  Carne 100% libre de hormonas  |  grassfedgt.com"
+    )
+
+    c.save()
+    buf.seek(0)
+    return buf
+
