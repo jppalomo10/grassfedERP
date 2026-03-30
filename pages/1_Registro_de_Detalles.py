@@ -120,7 +120,7 @@ with col_fecha:
 with col_pago:
     metodo_pago = st.selectbox(
         "💳 Método de pago",
-        ["Efectivo", "Transferencia", "Tarjeta"],
+        ["", "Efectivo", "Transferencia", "Tarjeta"],
     )
 
 col_envio, col_modo = st.columns(2)
@@ -128,7 +128,7 @@ col_envio, col_modo = st.columns(2)
 with col_envio:
     envio = st.selectbox(
         "📦 Envío",
-        ["Ciudad", "Antigua Guatemala", "Metropolitano"],
+        ["", "Ciudad", "Antigua Guatemala", "Metropolitano"],
     )
 
 with col_modo:
@@ -146,9 +146,9 @@ if modo_cliente == "Existente":
         opciones = df_clientes.apply(
                 lambda r: f"{r['Nombre']}  ({r['Teléfono']})", axis=1
             ).tolist()
-        seleccion = st.selectbox("Seleccionar cliente", opciones)
+        seleccion = st.selectbox("Seleccionar cliente", [""] + opciones)
         # Extraer teléfono del texto seleccionado
-        cliente_tel = seleccion.split("(")[-1].rstrip(")")
+        cliente_tel = seleccion.split("(")[-1].rstrip(")") if seleccion else None
 else:
     c1, c2 = st.columns(2)
     nuevo_tel = c1.text_input("Teléfono *")
@@ -175,13 +175,17 @@ else:
             opciones_prod = df_productos.apply(
                 lambda r: f"{r['Producto']}  (SKU: {r['SKU']})", axis=1
             ).tolist()
-            prod_sel = st.selectbox("Producto", opciones_prod, key="sel_prod")
-            sku_sel = prod_sel.split("SKU: ")[-1].rstrip(")")
-            precio_unitario = float(
-                df_productos.loc[
-                    df_productos["SKU"] == sku_sel, "Precio"
-                ].values[0]
-            )
+            prod_sel = st.selectbox("Producto", [""] + opciones_prod, key="sel_prod")
+            if prod_sel:
+                sku_sel = prod_sel.split("SKU: ")[-1].rstrip(")")
+                precio_unitario = float(
+                    df_productos.loc[
+                        df_productos["SKU"] == sku_sel, "Precio"
+                    ].values[0]
+                )
+            else:
+                sku_sel = None
+                precio_unitario = 0.0
 
         with cp2:
             cantidad = st.number_input("Cantidad", min_value=1, value=1, step=1, key="cant")
@@ -202,7 +206,7 @@ else:
             f"**Subtotal:** Q{subtotal_linea:,.2f}"
         )
 
-        if st.button("➕ Agregar línea", type="primary"):
+        if st.button("➕ Agregar línea", type="primary", disabled=(not prod_sel)):
             st.session_state.lineas.append(
                 {
                     "SKU": sku_sel,
@@ -241,9 +245,10 @@ if st.session_state.lineas:
                 st.session_state.lineas.pop(i)
                 st.rerun()
 
-    st.markdown(f"Costo de envío: **Q{costos_envio[envio]:,.2f}**")
+    envio_costo = costos_envio.get(envio, 0)
+    st.markdown(f"Costo de envío: **Q{envio_costo:,.2f}**")
 
-    total_pedido = sum(l["Subtotal"] for l in st.session_state.lineas) + costos_envio[envio]
+    total_pedido = sum(l["Subtotal"] for l in st.session_state.lineas) + envio_costo
     st.markdown(f"### 💰 Total del pedido: **Q{total_pedido:,.2f}**")
 else:
     st.info("Aún no ha agregado productos al pedido.")
@@ -316,6 +321,10 @@ if btn_guardar:
         errores.append("Debe seleccionar o registrar un cliente.")
     if modo_cliente == "Nuevo" and (not nuevo_tel or not nuevo_nombre or not nueva_dir):
         errores.append("Complete todos los campos del nuevo cliente (Teléfono, Nombre, Dirección).")
+    if not metodo_pago:
+        errores.append("Seleccione un método de pago.")
+    if not envio:
+        errores.append("Seleccione un tipo de envío.")
     if not st.session_state.lineas:
         errores.append("Agregue al menos una línea de detalle.")
 

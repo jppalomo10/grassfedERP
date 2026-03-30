@@ -116,9 +116,14 @@ opciones_clientes = df_clientes.apply(
 
 cliente_sel = st.sidebar.selectbox(
     "Seleccionar cliente",
-    opciones_clientes,
+    [""] + opciones_clientes,
     key="consulta_cliente",
 )
+
+if not cliente_sel:
+    st.info("Seleccione un cliente en la barra lateral para ver sus pedidos.")
+    st.stop()
+
 cliente_tel = cliente_sel.split("(")[-1].rstrip(")")
 cliente_nombre = df_clientes.loc[
     df_clientes["Teléfono"] == cliente_tel, "Nombre"
@@ -140,10 +145,19 @@ else:
     pedido_ids = df_pedidos["ID_Pedido"].tolist()
     st.sidebar.markdown(f"**{len(pedido_ids)}** factura(s) encontrada(s)")
 
+    # Mapeo ID → Fecha para mostrar en el selectbox
+    pedido_fechas = dict(zip(df_pedidos["ID_Pedido"], df_pedidos["Fecha"]))
+
+    def _fmt_factura(x):
+        f = pedido_fechas.get(x, "")
+        if hasattr(f, "strftime"):
+            f = f.strftime("%d/%m/%Y")
+        return f"Factura #{x}  ({f})"
+
     factura_sel = st.sidebar.selectbox(
         "Seleccionar factura",
         pedido_ids,
-        format_func=lambda x: f"Factura #{x}",
+        format_func=_fmt_factura,
         key="consulta_factura",
     )
 
