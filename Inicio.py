@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 from db import run_query
 from auth import check_login, role_badge, get_role
-from pdf_utils import generar_rutas_envio_pdf
+from pdf_utils import generar_rutas_envio_pdf, generar_factura_pdf, costos_envio
 
 st.set_page_config(
     page_title="Sistema ERP",
@@ -91,6 +91,93 @@ def get_rutas_envio():
     """)
     return rows if rows else []
 
+
+def get_facturas_pendientes_envio():
+    """Obtiene todos los pedidos pendientes de envío con datos completos para generar facturas."""
+    rows = run_query("""
+        SELECT p."ID_Pedido", p."Fecha", p."Total", p."Pago", p."Envío",
+               c."Nombre", c."Teléfono", c."Dirección",
+               COALESCE(c."NIT", 'C/F') AS "NIT"
+        FROM "Pedidos" p
+        JOIN "Clientes" c ON p."Cliente" = c."Teléfono"
+        WHERE p."Entregado" = false
+          AND p."Estado" != 'Anulado'
+        ORDER BY p."ID_Pedido" DESC
+    """)
+    return rows if rows else []
+
+
+def get_detalle_pedido(id_pedido):
+    """Devuelve las líneas de detalle de un pedido."""
+    rows = run_query(
+        '''
+        SELECT dp."SKU", p."Producto", dp."Cantidad",
+               dp."Peso", dp."Precio", dp."Descuento", dp."Subtotal"
+        FROM "DetallePedido" dp
+        JOIN "Productos" p ON dp."SKU" = p."SKU"
+        WHERE dp."ID_Pedido" = %s
+        ORDER BY dp."SKU"
+        ''',
+        params=(id_pedido,),
+    )
+    return rows if rows else []
+
+
+def generar_zip_facturas():
+    """Genera un ZIP con todas las facturas de pedidos pendientes de envío."""
+    import zipfile
+    from io import BytesIO
+
+    pedidos = get_facturas_pendientes_envio()
+    if not pedidos:
+        return None
+
+    zip_buf = BytesIO()
+    with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for ped in pedidos:
+            detalle = get_detalle_pedido(ped["ID_Pedido"])
+            if not detalle:
+                continue
+
+            lineas_pdf = []
+            for d in detalle:
+                lineas_pdf.append({
+                    "Producto": d["Producto"],
+                    "Cantidad": d["Cantidad"],
+                    "Peso (lb)": float(d["Peso"]),
+                    "Precio": float(d["Precio"]),
+                    "Descuento (%)": float(d["Descuento"]),
+                    "Subtotal": float(d["Subtotal"]),
+                })
+
+            fecha_pedido = ped["Fecha"]
+            if isinstance(fecha_pedido, str):
+                from datetime import datetime
+                fecha_pedido = datetime.strptime(fecha_pedido, "%Y-%m-%d").date()
+
+            pdf_bytes = generar_factura_pdf(
+                id_pedido=ped["ID_Pedido"],
+                fecha=fecha_pedido,
+                cliente_nombre=ped["Nombre"],
+                cliente_tel=ped["Teléfono"],
+                cliente_dir=ped["Dirección"],
+                metodo_pago=ped["Pago"],
+                lineas=lineas_pdf,
+                total=float(ped["Total"]),
+                envio=ped["Envío"],
+                cliente_nit=ped["NIT"],
+            )
+
+            nombre_archivo = ped["Nombre"].replace(" ", "")
+            zf.writestr(
+                f"Factura_{ped['ID_Pedido']}_{nombre_archivo}.pdf",
+                pdf_bytes.read(),
+            )
+
+    zip_buf.seek(0)
+    return zip_buf
+
+
 df_pago = get_pendientes_pago()
 df_envio = get_pendientes_envio()
 
@@ -142,3 +229,22 @@ with col_envio:
             use_container_width=True,
         )
 
+# ══════════════════════════════════════════════════════════════════════
+# DESCARGAR TODAS LAS FACTURAS PENDIENTES DE ENVÍO
+# ══════════════════════════════════════════════════════════════════════
+st.divider()
+
+if not df_envio.empty:
+    if st.button("📄 Generar Facturas Pendientes de Envío (ZIP)", type="primary", use_container_width=True):
+        with st.spinner("Generando facturas..."):
+            zip_data = generar_zip_facturas()
+        if zip_data:
+            st.download_button(
+                label="⬇️ Descargar ZIP de Facturas",
+                data=zip_data,
+                file_name="Facturas_Pendientes_Envio.zip",
+                mime="application/zip",
+                use_container_width=True,
+            )
+        else:
+            st.warning("No se encontraron facturas con detalle para generar.")
