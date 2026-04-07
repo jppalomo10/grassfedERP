@@ -175,12 +175,13 @@ def generar_factura_pdf(id_pedido, fecha, cliente_nombre, cliente_tel,
     return buf
 
 
-def generar_rutas_envio_pdf(pedidos):
+def generar_rutas_envio_pdf(pedidos, nombre_ruta=None):
     """
     Genera un PDF con la hoja de rutas de envío.
 
     `pedidos` debe ser una lista de dicts con las claves:
     ID_Pedido, Cliente, Teléfono, Dirección, Peso_Total, Envío.
+    `nombre_ruta` (opcional): nombre del motorista o ruta para mostrar en el encabezado.
     """
     from datetime import date as _date
 
@@ -211,7 +212,8 @@ def generar_rutas_envio_pdf(pedidos):
     c.setFont("Helvetica-Bold", 22)
     c.drawString(MARGIN, PAGE_H - 40, "GrassFed GT")
     c.setFont("Helvetica", 14)
-    c.drawString(MARGIN, PAGE_H - 62, "Hoja de Rutas de Envío")
+    subtitulo = f"Ruta: {nombre_ruta}" if nombre_ruta else "Hoja de Rutas de Envío"
+    c.drawString(MARGIN, PAGE_H - 62, subtitulo)
 
     right_x = PAGE_W - MARGIN
     c.setFont("Helvetica", 11)
