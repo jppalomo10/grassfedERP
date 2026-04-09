@@ -412,14 +412,12 @@ with tab_reporte:
 
         fig.update_layout(
             yaxis=dict(
-                title="Quetzales (Q)",
-                titlefont=dict(color="#2e7d32"),
+                title=dict(text="Quetzales (Q)", font=dict(color="#2e7d32")),
                 tickfont=dict(color="#2e7d32"),
                 tickprefix="Q ",
             ),
             yaxis2=dict(
-                title="Peso (lbs)",
-                titlefont=dict(color="#f57c00"),
+                title=dict(text="Peso (lbs)", font=dict(color="#f57c00")),
                 tickfont=dict(color="#f57c00"),
                 overlaying="y",
                 side="right",
