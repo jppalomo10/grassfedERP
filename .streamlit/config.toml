@@ -1,7 +1,7 @@
 [theme]
 base = "light"
-primaryColor = "#546232"
+primaryColor = "hsla(78, 32%, 29%, 1.00)"
 backgroundColor = "#ffffffff"
-secondaryBackgroundColor = "hsla(5, 57%, 75%, 1.00)"
+secondaryBackgroundColor = "hsla(78, 57%, 75%, 1.00)"
 textColor = "#000000ff"
 font = "sans serif"
