@@ -177,74 +177,235 @@ def generar_zip_facturas():
     zip_buf.seek(0)
     return zip_buf
 
+@st.cache_data(ttl=120)
+def get_reporte_productos(fecha_inicio, fecha_fin):
+    query = """
+    select
+      p."Producto",
+      sum(d."Peso") as "Peso",
+      round(sum(d."Subtotal"), 2) as "Total (Q)"
+    from "DetallePedido" d
+    join "Productos" p
+      on p."SKU" = d."SKU"
+    join "Pedidos" pe
+      on pe."ID_Pedido" = d."ID_Pedido"
+    where pe."Estado" <> 'Anulado'
+      and pe."Fecha" >= %s::date
+      and pe."Fecha" <= %s::date
+    group by
+      p."Producto"
+    order by
+      round(sum(d."Subtotal")) DESC;
+    """
+    rows = run_query(query, params=(fecha_inicio, fecha_fin))
+    return pd.DataFrame(rows) if rows else pd.DataFrame(columns=["Producto", "Peso", "Total (Q)"])
+
+@st.cache_data(ttl=120)
+def get_reporte_fechas(fecha_inicio, fecha_fin):
+    query = """
+    select
+      "Fecha",
+      round(sum("Total"), 2) as "Total (Q)"
+    from
+      "Pedidos"
+    where
+      "Estado" != 'Anulado'
+      and "Fecha" >= %s::date
+      and "Fecha" <= %s::date
+    group by
+      "Fecha"
+    order by
+      "Fecha" DESC;
+    """
+    rows = run_query(query, params=(fecha_inicio, fecha_fin))
+    return pd.DataFrame(rows) if rows else pd.DataFrame(columns=["Fecha", "Total (Q)"])
+
 
 df_pago = get_pendientes_pago()
 df_envio = get_pendientes_envio()
 
-col_pago, col_envio = st.columns(2)
+tab1, tab2 = st.tabs(["Pedidos Pendientes", "Reportes de Ventas"])
 
-with col_pago:
-    st.subheader("💳 Pendientes de Pago")
-    if df_pago.empty:
-        st.success("No hay pedidos pendientes de pago.")
-    else:
-        st.caption(f"{len(df_pago)} pedido(s)")
-        st.dataframe(
-            df_pago,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "ID_Pedido": st.column_config.NumberColumn("# Factura"),
-                "Fecha": st.column_config.DateColumn("Fecha"),
-                "Total": st.column_config.NumberColumn("Total", format="Q%.2f"),
-            },
-        )
+with tab1:
+    col_pago, col_envio = st.columns(2)
 
-with col_envio:
-    st.subheader("📦 Pendientes de Envío")
-    if df_envio.empty:
-        st.success("No hay pedidos pendientes de envío.")
-    else:
-        st.caption(f"{len(df_envio)} pedido(s)")
-        st.dataframe(
-            df_envio,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "ID_Pedido": st.column_config.NumberColumn("# Factura"),
-                "Fecha": st.column_config.DateColumn("Fecha"),
-                "Total": st.column_config.NumberColumn("Total", format="Q%.2f"),
-            },
-        )
+    with col_pago:
+        st.subheader("💳 Pendientes de Pago")
+        if df_pago.empty:
+            st.success("No hay pedidos pendientes de pago.")
+        else:
+            st.caption(f"{len(df_pago)} pedido(s)")
+            st.dataframe(
+                df_pago,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "ID_Pedido": st.column_config.NumberColumn("# Factura"),
+                    "Fecha": st.column_config.DateColumn("Fecha"),
+                    "Total": st.column_config.NumberColumn("Total", format="Q%.2f"),
+                },
+            )
 
-    # Botón para descargar hoja de rutas
-    rutas = get_rutas_envio()
-    if rutas:
-        st.download_button(
-            label="🚚 Descargar Rutas de Envío (PDF)",
-            data=generar_rutas_envio_pdf(rutas),
-            file_name="Rutas_Envio.pdf",
-            mime="application/pdf",
-            type="primary",
-            use_container_width=True,
-        )
+    with col_envio:
+        st.subheader("📦 Pendientes de Envío")
+        if df_envio.empty:
+            st.success("No hay pedidos pendientes de envío.")
+        else:
+            st.caption(f"{len(df_envio)} pedido(s)")
+            st.dataframe(
+                df_envio,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "ID_Pedido": st.column_config.NumberColumn("# Factura"),
+                    "Fecha": st.column_config.DateColumn("Fecha"),
+                    "Total": st.column_config.NumberColumn("Total", format="Q%.2f"),
+                },
+            )
 
-# ══════════════════════════════════════════════════════════════════════
-# DESCARGAR TODAS LAS FACTURAS PENDIENTES DE ENVÍO
-# ══════════════════════════════════════════════════════════════════════
-st.divider()
-
-if not df_envio.empty:
-    if st.button("📄 Generar Facturas Pendientes de Envío (ZIP)", type="primary", use_container_width=True):
-        with st.spinner("Generando facturas..."):
-            zip_data = generar_zip_facturas()
-        if zip_data:
+        # Botón para descargar hoja de rutas
+        rutas = get_rutas_envio()
+        if rutas:
             st.download_button(
-                label="⬇️ Descargar ZIP de Facturas",
-                data=zip_data,
-                file_name="Facturas_Pendientes_Envio.zip",
-                mime="application/zip",
+                label="🚚 Descargar Rutas de Envío (PDF)",
+                data=generar_rutas_envio_pdf(rutas),
+                file_name="Rutas_Envio.pdf",
+                mime="application/pdf",
+                type="primary",
                 use_container_width=True,
             )
+
+    # ══════════════════════════════════════════════════════════════════════
+    # DESCARGAR TODAS LAS FACTURAS PENDIENTES DE ENVÍO
+    # ══════════════════════════════════════════════════════════════════════
+
+    if not df_envio.empty:
+        if st.button("📄 Generar Facturas Pendientes de Envío (ZIP)", type="primary", use_container_width=True):
+            with st.spinner("Generando facturas..."):
+                zip_data = generar_zip_facturas()
+            if zip_data:
+                st.download_button(
+                    label="⬇️ Descargar ZIP de Facturas",
+                    data=zip_data,
+                    file_name="Facturas_Pendientes_Envio.zip",
+                    mime="application/zip",
+                    use_container_width=True,
+                )
+            else:
+                st.warning("No se encontraron facturas con detalle para generar.")
+
+with tab2:
+    st.subheader("📊 Reportes de Ventas")
+    import datetime
+
+    filtro_fecha = st.selectbox(
+        "Filtro de tiempo:",
+        ["Esta semana", "Este mes", "Últimos 3 meses", "Personalizado"],
+        index=1
+    )
+
+    hoy = datetime.datetime.now().date()
+    if filtro_fecha == "Esta semana":
+        fecha_inicio = hoy - datetime.timedelta(days=hoy.weekday())
+        fecha_fin = hoy
+    elif filtro_fecha == "Este mes":
+        fecha_inicio = hoy.replace(day=1)
+        fecha_fin = hoy
+    elif filtro_fecha == "Últimos 3 meses":
+        fecha_inicio = hoy - datetime.timedelta(days=90)
+        fecha_fin = hoy
+    else:
+        col_d1, col_d2 = st.columns(2)
+        with col_d1:
+            fecha_inicio = st.date_input("Fecha inicio", value=hoy.replace(day=1), max_value=hoy)
+        with col_d2:
+            fecha_fin = st.date_input("Fecha fin", value=hoy, max_value=hoy)
+        if fecha_inicio > fecha_fin:
+            st.error("La fecha de inicio no puede ser mayor que la fecha de fin.")
+            st.stop()
+
+    df_prod = get_reporte_productos(fecha_inicio, fecha_fin)
+    df_fecha = get_reporte_fechas(fecha_inicio, fecha_fin)
+
+    # ── Métricas resumen ────────────────────────────────────────────────
+    total_ventas = float(df_prod["Total (Q)"].sum()) if not df_prod.empty else 0
+    total_peso   = float(df_prod["Peso"].sum())      if not df_prod.empty else 0
+    num_dias     = len(df_fecha)                     if not df_fecha.empty else 0
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Total en ventas",      f"Q {total_ventas:,.2f}")
+    m2.metric("Peso total vendido",   f"{total_peso:,.2f} lb")
+    m3.metric("Días con ventas",      num_dias)
+
+    st.divider()
+
+    # ── Tablas lado a lado ──────────────────────────────────────────────
+    col_rep1, col_rep2 = st.columns(2)
+
+    with col_rep1:
+        st.markdown("##### Ventas por Producto")
+        st.dataframe(
+            df_prod,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Peso":      st.column_config.NumberColumn("Peso (lb)",   format="%.3f lb"),
+                "Total (Q)": st.column_config.NumberColumn("Total (Q)",   format="Q%,.2f"),
+            },
+        )
+
+    with col_rep2:
+        st.markdown("##### Ventas por Fecha")
+        st.dataframe(
+            df_fecha,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Fecha":     st.column_config.DateColumn("Fecha"),
+                "Total (Q)": st.column_config.NumberColumn("Total (Q)", format="Q%,.2f"),
+            },
+        )
+
+    # ── Gráfica debajo de las tablas ────────────────────────────────────
+    if not df_fecha.empty:
+        import plotly.graph_objects as go
+        import math
+
+        st.divider()
+        st.markdown("##### Tendencia de Ventas")
+
+        df_chart = df_fecha.sort_values("Fecha").copy()
+        df_chart["Fecha"] = pd.to_datetime(df_chart["Fecha"])
+
+        max_val = float(df_chart["Total (Q)"].max())
+        if max_val > 0:
+            exp = math.floor(math.log10(max_val))
+            nice_max = 1.5 * (10 ** exp)
         else:
-            st.warning("No se encontraron facturas con detalle para generar.")
+            nice_max = 1
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=df_chart["Fecha"],
+            y=df_chart["Total (Q)"],
+            mode="lines+markers",
+            line=dict(width=2),
+            marker=dict(size=7),
+            hovertemplate="<b>%{x|%d %b %Y}</b><br>Q %{y:,.2f}<extra></extra>",
+        ))
+        fig.update_layout(
+            height=320,
+            margin=dict(t=10, b=10, l=10, r=10),
+            xaxis=dict(
+                tickformat="%d %b",
+                dtick="D1",
+                tickangle=-30,
+                title=None,
+            ),
+            yaxis=dict(
+                range=[0, nice_max],
+                tickformat=".3s",
+                title="Total (Q)",
+            ),
+        )
+        st.plotly_chart(fig, use_container_width=True)
