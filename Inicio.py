@@ -35,8 +35,6 @@ with col2:
     row = run_query("select now() as ahora;", fetch="one")
     st.write("Conexión exitosa ✅", row["ahora"])
 
-st.divider()
-
 # ══════════════════════════════════════════════════════════════════════
 # RESUMEN DE PEDIDOS PENDIENTES
 # ══════════════════════════════════════════════════════════════════════
