@@ -34,7 +34,6 @@ with col2:
     st.subheader("Estado de la base de datos")
     row = run_query("select now() as ahora;", fetch="one")
     st.write("Conexión exitosa ✅", row["ahora"])
-
 # ══════════════════════════════════════════════════════════════════════
 # RESUMEN DE PEDIDOS PENDIENTES
 # ══════════════════════════════════════════════════════════════════════
@@ -219,10 +218,51 @@ def get_reporte_fechas(fecha_inicio, fecha_fin):
     return pd.DataFrame(rows) if rows else pd.DataFrame(columns=["Fecha", "Total (Q)"])
 
 
+@st.cache_data(ttl=120)
+def get_inventario():
+    """Calcula el stock actual por producto.
+    Entradas: MovimientosInventario.Debe
+    Salidas por transformación: MovimientosInventario.Haber
+    Salidas por venta: DetallePedido.Peso (pedidos no anulados)
+    """
+    rows = run_query("""
+        WITH entradas AS (
+            SELECT "SKU",
+                   COALESCE(SUM("Debe"), 0)  AS debe,
+                   COALESCE(SUM("Haber"), 0) AS haber
+            FROM "MovimientosInventario"
+            GROUP BY "SKU"
+        ),
+        salidas AS (
+            SELECT d."SKU",
+                   COALESCE(SUM(d."Peso"), 0) AS peso
+            FROM "DetallePedido" d
+            JOIN "Pedidos" pe ON pe."ID_Pedido" = d."ID_Pedido"
+            WHERE pe."Estado" != 'Anulado'
+            GROUP BY d."SKU"
+        )
+        SELECT p."SKU",
+               p."Producto",
+               COALESCE(e.debe, 0)  AS "Ingresos (lb)",
+               COALESCE(e.haber, 0) AS "Transf. Salida (lb)",
+               COALESCE(s.peso, 0)  AS "Ventas (lb)",
+               ROUND(CAST(
+                   COALESCE(e.debe, 0) - COALESCE(e.haber, 0) - COALESCE(s.peso, 0)
+               AS numeric), 2) AS "Stock (lb)"
+        FROM "Productos" p
+        LEFT JOIN entradas e ON p."SKU" = e."SKU"
+        LEFT JOIN salidas  s ON p."SKU" = s."SKU"
+        ORDER BY p."Producto"
+    """)
+    return pd.DataFrame(rows) if rows else pd.DataFrame(
+        columns=["SKU", "Producto", "Ingresos (lb)", "Transf. Salida (lb)", "Ventas (lb)", "Stock (lb)"]
+    )
+
+
 df_pago = get_pendientes_pago()
 df_envio = get_pendientes_envio()
 
-tab1, tab2 = st.tabs(["Pedidos Pendientes", "Reportes de Ventas"])
+tab1, tab_inv, tab2 = st.tabs(["Pedidos Pendientes", "📦 Inventario", "Reportes de Ventas"])
 
 with tab1:
     col_pago, col_envio = st.columns(2)
@@ -291,6 +331,56 @@ with tab1:
                 )
             else:
                 st.warning("No se encontraron facturas con detalle para generar.")
+
+# ══════════════════════════════════════════════════════════════════════
+# TAB INVENTARIO
+# ══════════════════════════════════════════════════════════════════════
+with tab_inv:
+    st.subheader("📦 Inventario Actual")
+
+    if st.button("🔄 Actualizar inventario", key="btn_refresh_inv"):
+        get_inventario.clear()
+        st.rerun()
+
+    df_inv = get_inventario()
+
+    if df_inv.empty:
+        st.info("No hay datos de inventario registrados.")
+    else:
+        # ── Métricas resumen ──────────────────────────────────────────
+        total_stock = float(df_inv["Stock (lb)"].sum())
+        productos_con_stock = int((df_inv["Stock (lb)"] > 0).sum())
+        productos_sin_stock = int((df_inv["Stock (lb)"] <= 0).sum())
+
+        mi1, mi2, mi3 = st.columns(3)
+        mi1.metric("Stock total", f"{total_stock:,.2f} lb")
+        mi2.metric("Productos con stock", productos_con_stock)
+        mi3.metric("Productos sin stock", productos_sin_stock)
+
+        st.divider()
+
+        # ── Tabla de inventario ───────────────────────────────────────
+        st.dataframe(
+            df_inv,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "SKU": st.column_config.TextColumn("SKU"),
+                "Producto": st.column_config.TextColumn("Producto"),
+                "Ingresos (lb)": st.column_config.NumberColumn(
+                    "Ingresos (lb)", format="%.2f"
+                ),
+                "Transf. Salida (lb)": st.column_config.NumberColumn(
+                    "Transf. Salida (lb)", format="%.2f"
+                ),
+                "Ventas (lb)": st.column_config.NumberColumn(
+                    "Ventas (lb)", format="%.2f"
+                ),
+                "Stock (lb)": st.column_config.NumberColumn(
+                    "Stock (lb)", format="%.2f"
+                ),
+            },
+        )
 
 with tab2:
     st.subheader("📊 Reportes de Ventas")
