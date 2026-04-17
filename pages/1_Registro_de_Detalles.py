@@ -195,7 +195,7 @@ else:
 
         with cp4:
             descuento = st.number_input(
-                "Descuento (Q)", min_value=0.0, max_value=100.0,
+                "Descuento (Q)", min_value=0.0,
                 value=0.0, step=1.0, format="%.1f", key="desc",
             )
 
