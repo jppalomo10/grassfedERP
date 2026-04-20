@@ -175,6 +175,147 @@ def generar_factura_pdf(id_pedido, fecha, cliente_nombre, cliente_tel,
     return buf
 
 
+def generar_estado_cuenta_pdf(cliente_nombre, cliente_tel, cliente_dir, cliente_nit, pedidos_pendientes):
+    """
+    Genera un PDF de estado de cuenta con los pedidos pendientes de pago del cliente.
+
+    `pedidos_pendientes` debe ser una lista de dicts con: ID_Pedido, Fecha, Total.
+    """
+    from datetime import date as _date
+
+    VERDE = Color(84 / 255, 98 / 255, 50 / 255)
+    MARRON = Color(26 / 255, 21 / 255, 16 / 255)
+    GRIS_CLARO = Color(245 / 255, 240 / 255, 233 / 255)
+    GRIS_TEXTO = Color(140 / 255, 140 / 255, 140 / 255)
+
+    PAGE_W, PAGE_H = LETTER
+    MARGIN = 40
+    usable_w = PAGE_W - 2 * MARGIN
+
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=LETTER)
+
+    # ── Encabezado ────────────────────────────────────────────────────
+    header_h = 110
+    c.setFillColor(VERDE)
+    c.rect(0, PAGE_H - header_h, PAGE_W, header_h, fill=1, stroke=0)
+
+    c.setFillColor(white)
+    c.setFont("Helvetica-Bold", 22)
+    c.drawString(MARGIN, PAGE_H - 40, "GrassFed GT")
+    c.setFont("Helvetica", 13)
+    c.drawString(MARGIN, PAGE_H - 60, "Estado de Cuenta")
+
+    right_x = PAGE_W - MARGIN
+    c.setFont("Helvetica", 11)
+    c.drawRightString(right_x, PAGE_H - 40, f"Generado: {_date.today().strftime('%d/%m/%Y')}")
+    c.drawRightString(right_x, PAGE_H - 56, "Pendiente de Pago")
+
+    y = PAGE_H - header_h - 30
+
+    # ── Datos del cliente ─────────────────────────────────────────────
+    c.setFillColor(MARRON)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(MARGIN, y, "Datos del cliente")
+    y -= 4
+    c.setStrokeColor(VERDE)
+    c.setLineWidth(1.5)
+    c.line(MARGIN, y, PAGE_W - MARGIN, y)
+    y -= 18
+
+    for lab, val in [
+        ("Nombre:", str(cliente_nombre)),
+        ("Teléfono:", str(cliente_tel)),
+        ("NIT:", str(cliente_nit or "C/F")),
+        ("Dirección:", str(cliente_dir)),
+    ]:
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(MARGIN, y, lab)
+        c.setFont("Helvetica", 10)
+        c.drawString(MARGIN + 70, y, val)
+        y -= 16
+
+    y -= 14
+
+    # ── Tabla de pedidos pendientes ───────────────────────────────────
+    c.setFillColor(MARRON)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(MARGIN, y, "Pedidos pendientes de pago")
+    y -= 4
+    c.setStrokeColor(VERDE)
+    c.line(MARGIN, y, PAGE_W - MARGIN, y)
+    y -= 8
+
+    headers = ["#", "No. Pedido", "Fecha", "Total"]
+    table_data = [headers]
+
+    total_general = 0.0
+    for idx, p in enumerate(pedidos_pendientes, 1):
+        fecha_str = p["Fecha"].strftime("%d/%m/%Y") if hasattr(p["Fecha"], "strftime") else str(p["Fecha"])
+        total_val = float(p["Total"])
+        total_general += total_val
+        table_data.append([
+            str(idx),
+            f"#{p['ID_Pedido']}",
+            fecha_str,
+            f"Q{total_val:,.2f}",
+        ])
+
+    col_widths = [
+        usable_w * 0.08,   # #
+        usable_w * 0.28,   # No. Pedido
+        usable_w * 0.32,   # Fecha
+        usable_w * 0.32,   # Total
+    ]
+
+    table = Table(table_data, colWidths=col_widths)
+
+    style_cmds = [
+        ("BACKGROUND", (0, 0), (-1, 0), VERDE),
+        ("TEXTCOLOR", (0, 0), (-1, 0), white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 10),
+        ("ALIGN", (0, 0), (0, -1), "CENTER"),
+        ("ALIGN", (3, 0), (3, -1), "RIGHT"),
+        ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 1), (-1, -1), 10),
+        ("TEXTCOLOR", (0, 1), (-1, -1), MARRON),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 7),
+        ("TOPPADDING", (0, 0), (-1, 0), 7),
+        ("BOTTOMPADDING", (0, 1), (-1, -1), 5),
+        ("TOPPADDING", (0, 1), (-1, -1), 5),
+        ("LINEBELOW", (0, -1), (-1, -1), 1.5, VERDE),
+    ]
+
+    for i in range(1, len(table_data)):
+        if i % 2 == 0:
+            style_cmds.append(("BACKGROUND", (0, i), (-1, i), GRIS_CLARO))
+
+    table.setStyle(TableStyle(style_cmds))
+
+    tw, th = table.wrap(usable_w, y)
+    table.drawOn(c, MARGIN, y - th)
+    y = y - th - 24
+
+    # ── Total general ─────────────────────────────────────────────────
+    c.setFillColor(MARRON)
+    c.setFont("Helvetica-Bold", 13)
+    c.drawRightString(PAGE_W - MARGIN - 90, y, "TOTAL PENDIENTE:")
+    c.drawRightString(PAGE_W - MARGIN, y, f"Q{total_general:,.2f}")
+
+    # ── Pie de página ─────────────────────────────────────────────────
+    c.setFillColor(GRIS_TEXTO)
+    c.setFont("Helvetica-Oblique", 8)
+    c.drawCentredString(
+        PAGE_W / 2, MARGIN - 10,
+        "GrassFed GT  |  Carne 100% libre de hormonas  |  grassfedgt.com"
+    )
+
+    c.save()
+    buf.seek(0)
+    return buf
+
+
 def generar_rutas_envio_pdf(pedidos, nombre_ruta=None):
     """
     Genera un PDF con la hoja de rutas de envío.

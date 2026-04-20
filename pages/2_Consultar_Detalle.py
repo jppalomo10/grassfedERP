@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from db import run_query
 from auth import check_login, role_badge
-from pdf_utils import generar_factura_pdf, costos_envio
+from pdf_utils import generar_factura_pdf, generar_estado_cuenta_pdf, costos_envio
 
 
 # ── Configuración de página ──────────────────────────────────────────
@@ -66,6 +66,19 @@ def get_detalle_pedido(id_pedido):
         ORDER BY dp."SKU"
         ''',
         params=(id_pedido,),
+    )
+    return rows if rows else []
+
+
+def get_pedidos_pendientes_cliente(cliente_tel):
+    rows = run_query(
+        '''
+        SELECT "ID_Pedido", "Fecha", "Total"
+        FROM "Pedidos"
+        WHERE "Cliente" = %s AND "Estado" = 'Pendiente de Pago'
+        ORDER BY "Fecha" ASC
+        ''',
+        params=(cliente_tel,),
     )
     return rows if rows else []
 
@@ -160,6 +173,31 @@ else:
         format_func=_fmt_factura,
         key="consulta_factura",
     )
+
+    st.sidebar.divider()
+    pendientes = get_pedidos_pendientes_cliente(cliente_tel)
+    if pendientes:
+        pdf_ec = generar_estado_cuenta_pdf(
+            cliente_nombre=cliente_nombre,
+            cliente_tel=cliente_tel,
+            cliente_dir=cliente_dir,
+            cliente_nit=cliente_nit,
+            pedidos_pendientes=pendientes,
+        )
+        st.sidebar.download_button(
+            label=f"📑 Estado de cuenta ({len(pendientes)} pendiente{'s' if len(pendientes) != 1 else ''})",
+            data=pdf_ec,
+            file_name=f"EstadoCuenta_{cliente_nombre.replace(' ', '')}.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+        )
+    else:
+        st.sidebar.button(
+            "📑 Estado de cuenta",
+            disabled=True,
+            use_container_width=True,
+            help="Este cliente no tiene pedidos pendientes de pago",
+        )
 
 # ══════════════════════════════════════════════════════════════════════
 # CONTENIDO PRINCIPAL
