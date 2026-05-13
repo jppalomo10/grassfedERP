@@ -7,6 +7,38 @@ from db import run_query
 from auth import check_login, role_badge
 from pdf_utils import generar_factura_pdf, costos_envio
 
+# ── Configuración de promociones ─────────────────────────────────────
+BUNDLE_CONFIGS = {
+    "Value Box": {
+        "box_sku": "P0001",
+        "box_precio": 535.0,
+        "componentes": [
+            {"SKU": "20004", "Producto": "Bistec / Milanesa",  "Peso (lb)": 1.25, "Cantidad": 1},
+            {"SKU": "30005", "Producto": "Cocer",              "Peso (lb)": 1.2,  "Cantidad": 1},
+            {"SKU": "30008", "Producto": "Guisar",             "Peso (lb)": 1.2,  "Cantidad": 1},
+            {"SKU": "20002", "Producto": "Asar",               "Peso (lb)": 1.2,  "Cantidad": 1},
+            {"SKU": "40006", "Producto": "Costilla",           "Peso (lb)": 2.0,  "Cantidad": 1},
+            {"SKU": "40013", "Producto": "Hueso Mixto",        "Peso (lb)": 2.0,  "Cantidad": 1},
+            {"SKU": "30011", "Producto": "Molida 80/20",       "Peso (lb)": 2.0,  "Cantidad": 1},
+            {"SKU": "50002", "Producto": "Pollo",              "Peso (lb)": 5.0,  "Cantidad": 1},
+        ],
+    },
+    "Premium Box": {
+        "box_sku": "P0002",
+        "box_precio": 655.0,
+        "componentes": [
+            {"SKU": "10003", "Producto": "Lomito Porcionado",  "Peso (lb)": 1.25, "Cantidad": 1},
+            {"SKU": "10008", "Producto": "Rib Eye c/hueso",    "Peso (lb)": 1.25, "Cantidad": 1},
+            {"SKU": "10010", "Producto": "Manita de rochoy",   "Peso (lb)": 1.2,  "Cantidad": 1},
+            {"SKU": "10001", "Producto": "Bolovique",          "Peso (lb)": 1.25, "Cantidad": 1},
+            {"SKU": "40006", "Producto": "Costilla",           "Peso (lb)": 2.0,  "Cantidad": 1},
+            {"SKU": "40013", "Producto": "Hueso Mixto",        "Peso (lb)": 2.0,  "Cantidad": 1},
+            {"SKU": "10005", "Producto": "Molida Magra",       "Peso (lb)": 2.0,  "Cantidad": 1},
+            {"SKU": "50002", "Producto": "Pollo",              "Peso (lb)": 5.0,  "Cantidad": 1},
+        ],
+    },
+}
+
 # ── Configuración de página ──────────────────────────────────────────
 st.set_page_config(
     page_title="Registro de Pedidos",
@@ -98,6 +130,28 @@ def insertar_cliente(telefono, nombre, direccion, nit):
     )
 
 
+def agregar_bundle(nombre_bundle: str):
+    cfg = BUNDLE_CONFIGS[nombre_bundle]
+    st.session_state.lineas.append({
+        "SKU": cfg["box_sku"],
+        "Producto": nombre_bundle,
+        "Cantidad": 1,
+        "Peso (lb)": 1.0,
+        "Precio": cfg["box_precio"],
+        "Descuento (%)": 0.0,
+        "Subtotal": cfg["box_precio"],
+    })
+    for comp in cfg["componentes"]:
+        st.session_state.lineas.append({
+            "SKU": comp["SKU"],
+            "Producto": comp["Producto"],
+            "Cantidad": comp["Cantidad"],
+            "Peso (lb)": comp["Peso (lb)"],
+            "Precio": 0.0,
+            "Descuento (%)": 0.0,
+            "Subtotal": 0.0,
+        })
+
 
 # ── Cargar catálogos ─────────────────────────────────────────────────
 df_clientes = get_clientes()
@@ -128,7 +182,7 @@ col_envio, col_modo = st.columns(2)
 with col_envio:
     envio = st.selectbox(
         "📦 Envío",
-        ["", "Ciudad", "Antigua Guatemala", "Metropolitano"],
+        ["", "Ciudad", "Antigua Guatemala", "Metropolitano", "Gratis"],
     )
 
 with col_modo:
@@ -168,6 +222,18 @@ st.subheader("Detalle del pedido")
 if df_productos.empty:
     st.warning("No hay productos en el catálogo.")
 else:
+    with st.expander("🎁 Agregar Promoción", expanded=False):
+        st.caption("Agrega todos los productos de la caja de una sola vez. Los componentes se registran con precio Q0 para control de inventario.")
+        col_vb, col_pb = st.columns(2)
+        with col_vb:
+            if st.button("📦 Value Box  —  Q535", use_container_width=True):
+                agregar_bundle("Value Box")
+                st.rerun()
+        with col_pb:
+            if st.button("⭐ Premium Box  —  Q655", use_container_width=True):
+                agregar_bundle("Premium Box")
+                st.rerun()
+
     with st.expander("➕ Agregar producto al pedido", expanded=True):
         cp1, cp2, cp3, cp4 = st.columns([3, 1, 1, 1])
 
