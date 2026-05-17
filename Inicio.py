@@ -220,42 +220,80 @@ def get_reporte_fechas(fecha_inicio, fecha_fin):
 
 @st.cache_data(ttl=120)
 def get_inventario():
-    """Calcula el stock actual por producto.
-    Entradas: MovimientosInventario.Debe
-    Salidas por transformación: MovimientosInventario.Haber
-    Salidas por venta: DetallePedido.Peso (pedidos no anulados)
+    """Calcula el stock actual por producto anclado al último snapshot físico.
+
+    Para cada SKU:
+      - Inicial      = "Peso" del registro más reciente en InventarioHistórico (0 si no hay).
+      - Ingresos     = SUM(MovimientosInventario.Debe)  con Fecha > snapshot.Fecha
+      - Transf. Sal. = SUM(MovimientosInventario.Haber) con Fecha > snapshot.Fecha
+      - Ventas       = SUM(DetallePedido.Peso) de pedidos no anulados con Pedido.Fecha > snapshot.Fecha
+      - Stock        = Inicial + Ingresos − Transf. Salida − Ventas
+
+    SKUs sin snapshot: Inicial = 0 y todos los movimientos/ventas cuentan
+    (reproduce el cálculo previo hasta que se registre el primer snapshot).
     """
     rows = run_query("""
-        WITH entradas AS (
-            SELECT "SKU",
-                   COALESCE(SUM("Debe"), 0)  AS debe,
-                   COALESCE(SUM("Haber"), 0) AS haber
-            FROM "MovimientosInventario"
+        WITH ultimo_snapshot AS (
+            SELECT "SKU", MAX("Fecha") AS fecha_base
+            FROM "InventarioHistórico"
             GROUP BY "SKU"
         ),
-        salidas AS (
-            SELECT d."SKU",
-                   COALESCE(SUM(d."Peso"), 0) AS peso
+        base AS (
+            SELECT p."SKU",
+                   p."Producto",
+                   COALESCE(ih."Peso", 0) AS stock_inicial,
+                   us.fecha_base
+            FROM "Productos" p
+            LEFT JOIN ultimo_snapshot us ON us."SKU" = p."SKU"
+            LEFT JOIN "InventarioHistórico" ih
+                   ON ih."SKU"   = us."SKU"
+                  AND ih."Fecha" = us.fecha_base
+        ),
+        entradas AS (
+            SELECT b."SKU",
+                   COALESCE(SUM(m."Debe"),  0) AS debe,
+                   COALESCE(SUM(m."Haber"), 0) AS haber
+            FROM base b
+            LEFT JOIN "MovimientosInventario" m
+                ON m."SKU" = b."SKU"
+               AND (b.fecha_base IS NULL OR m."Fecha" > b.fecha_base)
+            GROUP BY b."SKU"
+        ),
+        ventas_validas AS (
+            SELECT d."SKU", d."Peso", pe."Fecha"
             FROM "DetallePedido" d
             JOIN "Pedidos" pe ON pe."ID_Pedido" = d."ID_Pedido"
             WHERE pe."Estado" != 'Anulado'
-            GROUP BY d."SKU"
+        ),
+        salidas AS (
+            SELECT b."SKU",
+                   COALESCE(SUM(v."Peso"), 0) AS peso
+            FROM base b
+            LEFT JOIN ventas_validas v
+                ON v."SKU" = b."SKU"
+               AND (b.fecha_base IS NULL OR v."Fecha" > b.fecha_base)
+            GROUP BY b."SKU"
         )
-        SELECT p."SKU",
-               p."Producto",
-               COALESCE(e.debe, 0)  AS "Ingresos (lb)",
-               COALESCE(e.haber, 0) AS "Transf. Salida (lb)",
-               COALESCE(s.peso, 0)  AS "Ventas (lb)",
-               ROUND(CAST(
-                   COALESCE(e.debe, 0) - COALESCE(e.haber, 0) - COALESCE(s.peso, 0)
-               AS numeric), 2) AS "Stock (lb)"
-        FROM "Productos" p
-        LEFT JOIN entradas e ON p."SKU" = e."SKU"
-        LEFT JOIN salidas  s ON p."SKU" = s."SKU"
-        ORDER BY p."Producto"
+        SELECT b."SKU",
+               b."Producto",
+               ROUND(b.stock_inicial::numeric, 2) AS "Inicial (lb)",
+               COALESCE(e.debe,  0)               AS "Ingresos (lb)",
+               COALESCE(e.haber, 0)               AS "Transf. Salida (lb)",
+               COALESCE(s.peso,  0)               AS "Ventas (lb)",
+               ROUND(
+                   (b.stock_inicial
+                    + COALESCE(e.debe,  0)
+                    - COALESCE(e.haber, 0)
+                    - COALESCE(s.peso,  0))::numeric, 2
+               ) AS "Stock (lb)"
+        FROM base b
+        LEFT JOIN entradas e ON e."SKU" = b."SKU"
+        LEFT JOIN salidas  s ON s."SKU" = b."SKU"
+        ORDER BY b."Producto"
     """)
     return pd.DataFrame(rows) if rows else pd.DataFrame(
-        columns=["SKU", "Producto", "Ingresos (lb)", "Transf. Salida (lb)", "Ventas (lb)", "Stock (lb)"]
+        columns=["SKU", "Producto", "Inicial (lb)", "Ingresos (lb)",
+                 "Transf. Salida (lb)", "Ventas (lb)", "Stock (lb)"]
     )
 
 
@@ -367,6 +405,9 @@ with tab_inv:
             column_config={
                 "SKU": st.column_config.TextColumn("SKU"),
                 "Producto": st.column_config.TextColumn("Producto"),
+                "Inicial (lb)": st.column_config.NumberColumn(
+                    "Inicial (lb)", format="%.2f"
+                ),
                 "Ingresos (lb)": st.column_config.NumberColumn(
                     "Ingresos (lb)", format="%.2f"
                 ),

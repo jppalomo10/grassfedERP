@@ -72,8 +72,11 @@ def get_movimientos_recientes(limit=50):
 
 # ── Cargar catálogos ─────────────────────────────────────────────────
 df_productos = get_productos()
-productos_lista = df_productos["Producto"].tolist() if not df_productos.empty else []
-sku_map = dict(zip(df_productos["Producto"], df_productos["SKU"])) if not df_productos.empty else {}
+sku_lista = df_productos["SKU"].tolist() if not df_productos.empty else []
+# Mapa para mostrar el nombre del producto dado el SKU
+sku_to_name = dict(zip(df_productos["SKU"], df_productos["Producto"])) if not df_productos.empty else {}
+# Opciones combinadas: "[SKU] Nombre" para que el usuario busque por nombre pero se guarde el SKU
+opciones_combinadas = [f"[{s}] {sku_to_name.get(s, '')}" for s in sku_lista]
 
 # ── Título ───────────────────────────────────────────────────────────
 st.title("📦 Registro de Movimientos de Inventario")
@@ -110,11 +113,16 @@ with tab_ingreso:
     with st.expander("➕ Agregar producto al ingreso", expanded=True):
         ci1, ci2 = st.columns([3, 1])
         with ci1:
-            prod_ing = st.selectbox(
-                "Producto",
-                [""] + productos_lista,
-                key="sel_prod_ing",
+            sku_sel = st.selectbox(
+                "Buscar Producto (Nombre o SKU)",
+                [""] + opciones_combinadas,
+                key="sel_sku_ing",
             )
+            # Extraer SKU de "[SKU] Nombre"
+            sku_ing = ""
+            if sku_sel:
+                sku_ing = sku_sel.split("]")[0].replace("[", "").strip()
+            
         with ci2:
             peso_ing = st.number_input(
                 "Peso (lb)", min_value=0.0, value=0.0,
@@ -124,10 +132,10 @@ with tab_ingreso:
         comentario_ing = st.text_input("Comentario (opcional)", key="com_ing",
                                         placeholder="Ej: Compra a proveedor X")
 
-        if st.button("➕ Agregar línea de ingreso", type="primary", disabled=(not prod_ing or peso_ing <= 0)):
+        if st.button("➕ Agregar línea de ingreso", type="primary", disabled=(not sku_ing or peso_ing <= 0)):
             st.session_state.lineas_ingreso.append({
-                "Producto": prod_ing,
-                "SKU": sku_map.get(prod_ing, ""),
+                "SKU": sku_ing,
+                "Producto": sku_to_name.get(sku_ing, "Desconocido"),
                 "Peso (lb)": peso_ing,
                 "Comentario": comentario_ing,
             })
@@ -138,7 +146,7 @@ with tab_ingreso:
         st.markdown("#### 📋 Líneas del ingreso")
         df_ing = pd.DataFrame(st.session_state.lineas_ingreso)
         st.dataframe(
-            df_ing[["Producto", "Peso (lb)", "Comentario"]],
+            df_ing[["SKU", "Producto", "Peso (lb)", "Comentario"]],
             use_container_width=True,
             hide_index=True,
             column_config={
@@ -177,7 +185,7 @@ with tab_ingreso:
                         linea["SKU"],
                         fecha_ingreso,
                         linea["Peso (lb)"],  # Debe (ingresa)
-                        None,                 # Haber vacío
+                        0.0,                 # Haber vacío en 0.0
                     )
                 st.success(f"✅ Ingreso **{id_mov}** registrado exitosamente.")
                 get_movimientos_recientes.clear()
@@ -212,9 +220,9 @@ with tab_transformacion:
     st.markdown("---")
 
     # ── Inicializar estado del data_editor ───────────────────────────
-    if "df_transformacion" not in st.session_state:
+    if "df_transformacion" not in st.session_state or "SKU" not in st.session_state.df_transformacion.columns:
         st.session_state.df_transformacion = pd.DataFrame(
-            columns=["Producto", "Debe", "Haber"]
+            columns=["SKU", "Debe", "Haber"]
         )
 
     st.markdown("#### 📝 Partida de Transformación")
@@ -230,9 +238,10 @@ with tab_transformacion:
         use_container_width=True,
         key="editor_transf",
         column_config={
-            "Producto": st.column_config.SelectboxColumn(
-                "Producto",
-                options=productos_lista,
+            "SKU": st.column_config.SelectboxColumn(
+                "Producto (SKU)",
+                help="Busque por nombre del producto o por el código SKU",
+                options=opciones_combinadas,
                 required=True,
                 width="large",
             ),
@@ -254,9 +263,21 @@ with tab_transformacion:
     )
 
     # ── Resumen de la partida ────────────────────────────────────────
-    if not edited_df.empty and edited_df["Producto"].notna().any():
+    if not edited_df.empty and edited_df["SKU"].notna().any():
         # Limpiar filas vacías
-        df_valido = edited_df.dropna(subset=["Producto"]).copy()
+        df_valido = edited_df.dropna(subset=["SKU"]).copy()
+        
+        # Helper para extraer SKU limpio para el procesamiento
+        def extraer_sku(val):
+            if not val: return ""
+            val = str(val)
+            if "[" in val and "]" in val:
+                return val.split("]")[0].replace("[", "").strip()
+            return val.strip()
+
+        # Agregar columna informativa de producto para el resumen visual
+        df_valido["SKU_Limpio"] = df_valido["SKU"].apply(extraer_sku)
+        df_valido["Producto (Info)"] = df_valido["SKU_Limpio"].map(sku_to_name)
 
         if not df_valido.empty:
             total_debe = df_valido["Debe"].fillna(0).sum()
@@ -289,14 +310,16 @@ with tab_transformacion:
             for _, row in df_valido.iterrows():
                 debe_val = row["Debe"] if pd.notna(row["Debe"]) else 0
                 haber_val = row["Haber"] if pd.notna(row["Haber"]) else 0
+                nombre_info = row["Producto (Info)"] if pd.notna(row["Producto (Info)"]) else row["SKU"]
+                
                 if debe_val > 0 and haber_val > 0:
                     errores_partida.append(
-                        f"'{row['Producto']}' tiene valores en Debe y Haber. "
+                        f"'{nombre_info}' tiene valores en Debe y Haber. "
                         "Cada línea debe tener valor solo en uno de los dos."
                     )
                 if debe_val == 0 and haber_val == 0:
                     errores_partida.append(
-                        f"'{row['Producto']}' no tiene peso en Debe ni en Haber."
+                        f"'{nombre_info}' no tiene peso en Debe ni en Haber."
                     )
 
             if total_debe == 0:
@@ -324,11 +347,23 @@ with tab_transformacion:
 
             if btn_guardar_tr:
                 try:
+                    # 1. Validar y limpiar datos
+                    data_a_insertar = []
                     for _, row in df_valido.iterrows():
-                        sku = sku_map.get(row["Producto"], "")
-                        debe_val = float(row["Debe"]) if pd.notna(row["Debe"]) and row["Debe"] > 0 else None
-                        haber_val = float(row["Haber"]) if pd.notna(row["Haber"]) and row["Haber"] > 0 else None
-                        insertar_movimiento(id_mov, sku, fecha_transf, debe_val, haber_val)
+                        sku_actual = extraer_sku(row["SKU"])
+                        if not sku_actual or sku_actual not in sku_lista:
+                            st.error(f"❌ El producto '{row['SKU']}' no tiene un SKU válido.")
+                            st.stop()
+                        
+                        data_a_insertar.append({
+                            "sku": sku_actual,
+                            "debe": float(row["Debe"]) if pd.notna(row["Debe"]) and row["Debe"] > 0 else 0.0,
+                            "haber": float(row["Haber"]) if pd.notna(row["Haber"]) and row["Haber"] > 0 else 0.0
+                        })
+
+                    # 2. Si todo está bien, insertar fila por fila
+                    for item in data_a_insertar:
+                        insertar_movimiento(id_mov, item["sku"], fecha_transf, item["debe"], item["haber"])
 
                     st.success(f"✅ Transformación **{id_mov}** registrada exitosamente.")
                     get_movimientos_recientes.clear()
