@@ -104,6 +104,24 @@ def get_facturas_pendientes_envio():
     return rows if rows else []
 
 
+def marcar_pagado(id_pedido):
+    """Marca un pedido como pagado."""
+    run_query(
+        'UPDATE "Pedidos" SET "Estado" = %s WHERE "ID_Pedido" = %s',
+        params=("Pagado", id_pedido),
+        fetch="none",
+    )
+
+
+def marcar_enviado(id_pedido):
+    """Marca un pedido como entregado/enviado."""
+    run_query(
+        'UPDATE "Pedidos" SET "Entregado" = %s WHERE "ID_Pedido" = %s',
+        params=(True, id_pedido),
+        fetch="none",
+    )
+
+
 def get_detalle_pedido(id_pedido):
     """Devuelve las líneas de detalle de un pedido."""
     rows = run_query(
@@ -322,6 +340,30 @@ with tab1:
                 },
             )
 
+            # ── Marcar pedidos como pagados ──────────────────────────
+            cliente_por_pago = dict(zip(df_pago["ID_Pedido"], df_pago["Cliente"]))
+            sel_pago = st.multiselect(
+                "Seleccionar pedidos a marcar como pagados",
+                df_pago["ID_Pedido"].tolist(),
+                format_func=lambda x: f"#{x} – {cliente_por_pago.get(x, '')}",
+                key="sel_pago",
+            )
+            if st.button(
+                "💳 Marcar como Pagado",
+                type="primary",
+                use_container_width=True,
+                disabled=not sel_pago,
+                key="btn_marcar_pagado",
+            ):
+                try:
+                    for pid in sel_pago:
+                        marcar_pagado(pid)
+                    get_pendientes_pago.clear()
+                    st.success(f"✅ {len(sel_pago)} pedido(s) marcado(s) como pagado(s).")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error al actualizar: {e}")
+
     with col_envio:
         st.subheader("📦 Pendientes de Envío")
         if df_envio.empty:
@@ -339,17 +381,30 @@ with tab1:
                 },
             )
 
-        # Botón para descargar hoja de rutas
-        rutas = get_rutas_envio()
-        if rutas:
-            st.download_button(
-                label="🚚 Descargar Rutas de Envío (PDF)",
-                data=generar_rutas_envio_pdf(rutas),
-                file_name="Rutas_Envio.pdf",
-                mime="application/pdf",
+            # ── Marcar pedidos como enviados ─────────────────────────
+            cliente_por_envio = dict(zip(df_envio["ID_Pedido"], df_envio["Cliente"]))
+            sel_envio = st.multiselect(
+                "Seleccionar pedidos a marcar como enviados",
+                df_envio["ID_Pedido"].tolist(),
+                format_func=lambda x: f"#{x} – {cliente_por_envio.get(x, '')}",
+                key="sel_envio",
+            )
+            if st.button(
+                "📦 Marcar como Enviado",
                 type="primary",
                 use_container_width=True,
-            )
+                disabled=not sel_envio,
+                key="btn_marcar_enviado",
+            ):
+                try:
+                    for pid in sel_envio:
+                        marcar_enviado(pid)
+                    get_pendientes_envio.clear()
+                    get_rutas_envio.clear()
+                    st.success(f"✅ {len(sel_envio)} pedido(s) marcado(s) como enviado(s).")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error al actualizar: {e}")
 
     # ══════════════════════════════════════════════════════════════════════
     # DESCARGAR TODAS LAS FACTURAS PENDIENTES DE ENVÍO
