@@ -166,31 +166,18 @@ st.divider()
 # ══════════════════════════════════════════════════════════════════════
 st.subheader("Datos del pedido")
 
-col_fecha, col_pago = st.columns(2)
+col_fecha, col_modo = st.columns(2)
 
 with col_fecha:
     fecha = st.date_input("📅 Fecha", value=date.today())
 
-with col_pago:
-    metodo_pago = st.selectbox(
-        "💳 Método de pago",
-        ["", "Efectivo", "Transferencia", "Tarjeta"],
-    )
-
-col_envio, col_modo = st.columns(2)
-
-with col_envio:
-    envio = st.selectbox(
-        "📦 Envío",
-        ["", "Ciudad", "Antigua Guatemala", "Metropolitano", "Gratis"],
-    )
-
 with col_modo:
     modo_cliente = st.radio(
-    "Cliente",
-    ["Existente", "Nuevo"],
-    horizontal=True,
+        "Cliente",
+        ["Existente", "Nuevo"],
+        horizontal=True,
     )
+
 # ── Selector de cliente ──────────────────────────────────────────────
 if modo_cliente == "Existente":
     if df_clientes.empty:
@@ -203,6 +190,13 @@ if modo_cliente == "Existente":
         seleccion = st.selectbox("Seleccionar cliente", [""] + opciones)
         # Extraer teléfono del texto seleccionado
         cliente_tel = seleccion.split("(")[-1].rstrip(")") if seleccion else None
+        direccion_cli = df_clientes.loc[
+            df_clientes["Teléfono"] == cliente_tel, "Dirección"
+        ]
+        if cliente_tel and not direccion_cli.empty:
+            st.markdown(f"**Dirección del Cliente:** {direccion_cli.values[0]}")
+        else:
+            st.markdown("**Dirección del Cliente:** —")
 else:
     c1, c2 = st.columns(2)
     nuevo_tel = c1.text_input("Teléfono *")
@@ -211,6 +205,20 @@ else:
     nueva_dir = st.text_input("Dirección *")
     cliente_tel = nuevo_tel  # se usará al guardar
     nuevo_nombre = nuevo_nombre.upper()
+
+col_pago, col_envio = st.columns(2)
+
+with col_pago:
+    metodo_pago = st.selectbox(
+        "💳 Método de pago",
+        ["", "Efectivo", "Transferencia", "Tarjeta"],
+    )
+
+with col_envio:
+    envio = st.selectbox(
+        "📦 Envío",
+        ["", "Ciudad", "Antigua Guatemala", "Metropolitano", "Gratis"],
+    )
 
 st.divider()
 
