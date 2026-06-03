@@ -47,7 +47,7 @@ def get_pendientes_pago():
         JOIN "Clientes" c ON p."Cliente" = c."Teléfono"
         WHERE p."Estado" = 'Pendiente de Pago'
         AND p."Estado" != 'Anulado'
-        ORDER BY p."Fecha" DESC
+        ORDER BY p."ID_Pedido" DESC
     """)
     return pd.DataFrame(rows) if rows else pd.DataFrame(
         columns=["ID_Pedido", "Fecha", "Cliente", "Total", "Pago"]
@@ -62,7 +62,7 @@ def get_pendientes_envio():
         JOIN "Clientes" c ON p."Cliente" = c."Teléfono"
         WHERE p."Entregado" = false
         AND p."Estado" != 'Anulado'
-        ORDER BY p."Fecha" DESC
+        ORDER BY p."ID_Pedido" DESC
     """)
     return pd.DataFrame(rows) if rows else pd.DataFrame(
         columns=["ID_Pedido", "Fecha", "Cliente", "Total", "Envío"]
