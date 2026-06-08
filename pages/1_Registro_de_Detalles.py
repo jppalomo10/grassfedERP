@@ -13,7 +13,7 @@ BUNDLE_CONFIGS = {
         "box_sku": "P0001",
         "box_precio": 535.0,
         "componentes": [
-            {"SKU": "20004", "Producto": "Bistec / Milanesa",  "Peso (lb)": 1.25, "Cantidad": 1},
+            {"SKU": "20004", "Producto": "Bistec / Milanesa",  "Peso (lb)": 1.2, "Cantidad": 1},
             {"SKU": "30005", "Producto": "Cocer",              "Peso (lb)": 1.2,  "Cantidad": 1},
             {"SKU": "30008", "Producto": "Guisar",             "Peso (lb)": 1.2,  "Cantidad": 1},
             {"SKU": "20002", "Producto": "Asar",               "Peso (lb)": 1.2,  "Cantidad": 1},
@@ -27,10 +27,10 @@ BUNDLE_CONFIGS = {
         "box_sku": "P0002",
         "box_precio": 655.0,
         "componentes": [
-            {"SKU": "10003", "Producto": "Lomito Porcionado",  "Peso (lb)": 1.25, "Cantidad": 1},
-            {"SKU": "10008", "Producto": "Rib Eye c/hueso",    "Peso (lb)": 1.25, "Cantidad": 1},
+            {"SKU": "10003", "Producto": "Lomito Porcionado",  "Peso (lb)": 1.2, "Cantidad": 1},
+            {"SKU": "10008", "Producto": "Rib Eye c/hueso",    "Peso (lb)": 1.2, "Cantidad": 1},
             {"SKU": "10010", "Producto": "Manita de rochoy",   "Peso (lb)": 1.2,  "Cantidad": 1},
-            {"SKU": "10001", "Producto": "Bolovique",          "Peso (lb)": 1.25, "Cantidad": 1},
+            {"SKU": "10001", "Producto": "Bolovique",          "Peso (lb)": 1.2, "Cantidad": 1},
             {"SKU": "40006", "Producto": "Costilla",           "Peso (lb)": 2.0,  "Cantidad": 1},
             {"SKU": "40013", "Producto": "Hueso Mixto",        "Peso (lb)": 2.0,  "Cantidad": 1},
             {"SKU": "10005", "Producto": "Molida Magra",       "Peso (lb)": 2.0,  "Cantidad": 1},
