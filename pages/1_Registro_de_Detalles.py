@@ -130,7 +130,13 @@ def insertar_cliente(telefono, nombre, direccion, nit):
     )
 
 
-def agregar_bundle(nombre_bundle: str):
+def agregar_bundle(nombre_bundle: str, componentes_editados):
+    """Agrega la caja (con precio) y sus componentes (precio Q0) al carrito.
+
+    `componentes_editados` es una lista de dicts con los pesos ya ajustados
+    por el usuario. La línea de la caja se deja con Peso 1.0 para que el
+    precio NO se multiplique por el peso.
+    """
     cfg = BUNDLE_CONFIGS[nombre_bundle]
     st.session_state.lineas.append({
         "SKU": cfg["box_sku"],
@@ -141,7 +147,7 @@ def agregar_bundle(nombre_bundle: str):
         "Descuento (%)": 0.0,
         "Subtotal": cfg["box_precio"],
     })
-    for comp in cfg["componentes"]:
+    for comp in componentes_editados:
         st.session_state.lineas.append({
             "SKU": comp["SKU"],
             "Producto": comp["Producto"],
@@ -231,16 +237,71 @@ if df_productos.empty:
     st.warning("No hay productos en el catálogo.")
 else:
     with st.expander("🎁 Agregar Promoción", expanded=False):
-        st.caption("Agrega todos los productos de la caja de una sola vez. Los componentes se registran con precio Q0 para control de inventario.")
+        st.caption("Selecciona una caja, ajusta los pesos de cada componente y guárdala al carrito. Los componentes se registran con precio Q0 para control de inventario.")
+
+        if "promo_activa" not in st.session_state:
+            st.session_state.promo_activa = None
+        if "promo_nonce" not in st.session_state:
+            st.session_state.promo_nonce = 0
+
         col_vb, col_pb = st.columns(2)
         with col_vb:
             if st.button("📦 Value Box  —  Q535", use_container_width=True):
-                agregar_bundle("Value Box")
+                st.session_state.promo_activa = "Value Box"
+                st.session_state.promo_nonce += 1
                 st.rerun()
         with col_pb:
             if st.button("⭐ Premium Box  —  Q655", use_container_width=True):
-                agregar_bundle("Premium Box")
+                st.session_state.promo_activa = "Premium Box"
+                st.session_state.promo_nonce += 1
                 st.rerun()
+
+        if st.session_state.promo_activa:
+            nombre_promo = st.session_state.promo_activa
+            cfg_promo = BUNDLE_CONFIGS[nombre_promo]
+            st.markdown(
+                f"**Ajustando pesos — {nombre_promo} (Q{cfg_promo['box_precio']:,.0f})**"
+            )
+            st.caption("Los pesos sugeridos vienen de la caja; modifícalos según el peso real.")
+
+            df_comp = pd.DataFrame(cfg_promo["componentes"])[
+                ["SKU", "Producto", "Cantidad", "Peso (lb)"]
+            ]
+            edited = st.data_editor(
+                df_comp,
+                use_container_width=True,
+                hide_index=True,
+                key=f"editor_promo_{nombre_promo}_{st.session_state.promo_nonce}",
+                column_config={
+                    "SKU": st.column_config.TextColumn("SKU", disabled=True),
+                    "Producto": st.column_config.TextColumn("Producto", disabled=True),
+                    "Cantidad": st.column_config.NumberColumn("Cantidad", disabled=True),
+                    "Peso (lb)": st.column_config.NumberColumn(
+                        "Peso (lb)", min_value=0.0, step=0.25, format="%.2f"
+                    ),
+                },
+            )
+
+            total_lb = float(edited["Peso (lb)"].sum())
+            st.caption(f"Peso total de componentes: **{total_lb:.2f} lb**")
+
+            col_save, col_cancel = st.columns(2)
+            with col_save:
+                if st.button(
+                    "✅ Guardar promoción al carrito",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    if (edited["Peso (lb)"] <= 0).any():
+                        st.error("Todos los componentes deben tener un peso mayor a 0.")
+                    else:
+                        agregar_bundle(nombre_promo, edited.to_dict("records"))
+                        st.session_state.promo_activa = None
+                        st.rerun()
+            with col_cancel:
+                if st.button("✖ Cancelar", use_container_width=True):
+                    st.session_state.promo_activa = None
+                    st.rerun()
 
     with st.expander("➕ Agregar producto al pedido", expanded=True):
         cp1, cp2, cp3, cp4 = st.columns([3, 1, 1, 1])
