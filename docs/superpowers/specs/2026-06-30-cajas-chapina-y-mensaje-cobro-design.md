@@ -48,6 +48,7 @@ ON CONFLICT ("SKU") DO NOTHING;
 | Carne para cocer | 30005 | 1.5 | 1 |
 | Carne para guisar | 30008 | 1.5 | 1 |
 | Molida 80/20 | 30011 | 2.0 | 1 |
+| Costilla | 40006 | 2.0 | 1 |
 | Pollo entero | 50002 | 5.0 | 1 |
 | Recado de pepián | 30032 | 1.0 | 1 |
 | Recado de jocón | 30035 | 1.0 | 1 |
@@ -60,6 +61,7 @@ ON CONFLICT ("SKU") DO NOTHING;
 | Manita de Rochoy | 10010 | 1.5 | 1 |
 | Bolovique | 10001 | 1.5 | 1 |
 | Molida de puyaso | 10004 | 2.0 | 1 |
+| Costilla | 40006 | 2.0 | 1 |
 | Pollo entero | 50002 | 5.0 | 1 |
 | Recado de pepián | 30032 | 1.0 | 1 |
 | Recado de jocón | 30035 | 1.0 | 1 |
