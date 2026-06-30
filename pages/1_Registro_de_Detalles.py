@@ -6,6 +6,7 @@ from decimal import Decimal
 from db import run_query
 from auth import check_login, role_badge
 from pdf_utils import generar_factura_pdf, costos_envio
+from ui_mensajes import render_seccion_mensaje_cobro
 
 # ── Configuración de promociones ─────────────────────────────────────
 BUNDLE_CONFIGS = {
@@ -35,6 +36,32 @@ BUNDLE_CONFIGS = {
             {"SKU": "40013", "Producto": "Hueso Mixto",        "Peso (lb)": 2.0,  "Cantidad": 1},
             {"SKU": "10005", "Producto": "Molida Magra",       "Peso (lb)": 2.0,  "Cantidad": 1},
             {"SKU": "50002", "Producto": "Pollo",              "Peso (lb)": 5.0,  "Cantidad": 1},
+        ],
+    },
+    "Value Box Chapina": {
+        "box_sku": "P0003",
+        "box_precio": 550.0,
+        "componentes": [
+            {"SKU": "20004", "Producto": "Carne para bistec", "Peso (lb)": 1.5, "Cantidad": 1},
+            {"SKU": "30005", "Producto": "Carne para cocer",  "Peso (lb)": 1.5, "Cantidad": 1},
+            {"SKU": "30008", "Producto": "Carne para guisar", "Peso (lb)": 1.5, "Cantidad": 1},
+            {"SKU": "30011", "Producto": "Molida 80/20",      "Peso (lb)": 2.0, "Cantidad": 1},
+            {"SKU": "50002", "Producto": "Pollo entero",      "Peso (lb)": 5.0, "Cantidad": 1},
+            {"SKU": "30032", "Producto": "Recado de pepián",  "Peso (lb)": 1.0, "Cantidad": 1},
+            {"SKU": "30035", "Producto": "Recado de jocón",   "Peso (lb)": 1.0, "Cantidad": 1},
+        ],
+    },
+    "Premium Box Chapina": {
+        "box_sku": "P0004",
+        "box_precio": 675.0,
+        "componentes": [
+            {"SKU": "10003", "Producto": "Lomito Steak",      "Peso (lb)": 1.5, "Cantidad": 1},
+            {"SKU": "10010", "Producto": "Manita de Rochoy",  "Peso (lb)": 1.5, "Cantidad": 1},
+            {"SKU": "10001", "Producto": "Bolovique",         "Peso (lb)": 1.5, "Cantidad": 1},
+            {"SKU": "10004", "Producto": "Molida de puyaso",  "Peso (lb)": 2.0, "Cantidad": 1},
+            {"SKU": "50002", "Producto": "Pollo entero",      "Peso (lb)": 5.0, "Cantidad": 1},
+            {"SKU": "30032", "Producto": "Recado de pepián",  "Peso (lb)": 1.0, "Cantidad": 1},
+            {"SKU": "30035", "Producto": "Recado de jocón",   "Peso (lb)": 1.0, "Cantidad": 1},
         ],
     },
 }
@@ -256,6 +283,18 @@ else:
                 st.session_state.promo_nonce += 1
                 st.rerun()
 
+        col_vbc, col_pbc = st.columns(2)
+        with col_vbc:
+            if st.button("📦 Value Box Chapina  —  Q550", use_container_width=True):
+                st.session_state.promo_activa = "Value Box Chapina"
+                st.session_state.promo_nonce += 1
+                st.rerun()
+        with col_pbc:
+            if st.button("⭐ Premium Box Chapina  —  Q675", use_container_width=True):
+                st.session_state.promo_activa = "Premium Box Chapina"
+                st.session_state.promo_nonce += 1
+                st.rerun()
+
         if st.session_state.promo_activa:
             nombre_promo = st.session_state.promo_activa
             cfg_promo = BUNDLE_CONFIGS[nombre_promo]
@@ -388,6 +427,23 @@ if st.session_state.lineas:
 else:
     st.info("Aún no ha agregado productos al pedido.")
     total_pedido = 0
+
+# ── Mensaje de cobro para copiar/pegar ───────────────────────────────
+if st.session_state.lineas:
+    if modo_cliente == "Existente" and cliente_tel:
+        _match_nombre = df_clientes.loc[df_clientes["Teléfono"] == cliente_tel, "Nombre"]
+        nombre_msg = _match_nombre.iloc[0] if not _match_nombre.empty else ""
+    elif modo_cliente == "Nuevo":
+        nombre_msg = nuevo_nombre
+    else:
+        nombre_msg = ""
+
+    render_seccion_mensaje_cobro(
+        nombre=nombre_msg,
+        total=total_pedido,
+        metodo_pago=metodo_pago,
+        key_prefix="reg_msg",
+    )
 
 # ── Botones ──────────────────────────────────────────────────────────
 col_guardar, col_limpiar, col_pdf = st.columns(3)

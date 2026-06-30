@@ -3,6 +3,7 @@ import pandas as pd
 from db import run_query
 from auth import check_login, role_badge
 from pdf_utils import generar_factura_pdf, generar_estado_cuenta_pdf, costos_envio
+from ui_mensajes import render_seccion_mensaje_cobro
 
 
 # ── Configuración de página ──────────────────────────────────────────
@@ -392,6 +393,17 @@ with col_btn_pdf:
             use_container_width=True,
             help="No hay detalle para generar la factura",
         )
+
+# ══════════════════════════════════════════════════════════════════════
+# SECCIÓN – MENSAJE DE COBRO PARA COPIAR/PEGAR
+# ══════════════════════════════════════════════════════════════════════
+st.divider()
+render_seccion_mensaje_cobro(
+    nombre=cliente_nombre,
+    total=float(pedido["Total"]),
+    metodo_pago=nuevo_pago,
+    key_prefix=f"cons_msg_{factura_sel}",
+)
 
 # ── Indicadores visuales de estado ───────────────────────────────────
 st.divider()
