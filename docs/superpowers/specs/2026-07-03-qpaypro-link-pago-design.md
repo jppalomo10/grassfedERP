@@ -83,6 +83,23 @@ sandbox** si la página alojada ofrece el formulario de facturación. Según el 
   FEL con la API `QpayFel` del lado del comercio — fuera de v1). Mientras tanto, para los pedidos
   que requieran factura, el operador puede seguir creando el link en el panel como hoy.
 
+#### Hallazgos de la prueba en sandbox (2026-07-03)
+Prueba real contra `sandboxpayments.qpaypro.com` con las credenciales de sandbox de la doc:
+- ✅ **Generación de link: funciona.** Tras corregir los campos requeridos (ver abajo), la API
+  devuelve HTTP 200 con `{"estado":"success","data":{"token":"..."}}`. El token está en
+  `data.token` (confirmado; el extractor ya lo maneja).
+- ✅ **Campos requeridos no documentados:** la API exige además `x_url_cancel`, `http_origin`,
+  `x_company`, `x_address`, `x_city`, `x_state`, `x_zip`, `taxes`, `origen`. Ya incorporados al
+  payload (con `http_origin` y `url_retorno` configurables).
+- ⚠️ **FEL: sin resolver, requiere acción externa.** El HTML de la página alojada trae un flag
+  `"facturar":false`. No se hereda solo. Se probaron ~11 nombres de parámetro candidatos
+  (`facturar`, `x_fel`, `facturacion`, etc.) con valores `true`/`"si"`/`1`; **ninguno** activó el
+  flag. Conclusión: o no existe un parámetro público, o el comercio de prueba de sandbox no tiene
+  QpayFel activo (por lo que `facturar` no puede volverse `true` con esas credenciales). No es
+  distinguible desde sandbox. **Siguiente paso:** confirmar con QPayPro si `register_transaction_store`
+  respeta la FEL (parámetro o herencia de la cuenta), y/o probar con credenciales de producción
+  una vez que la cuenta tenga QpayFel activo.
+
 ## 4. Arquitectura
 
 Se sigue el patrón ya establecido por `mensajes.py` (lógica pura, sin Streamlit) +
@@ -234,10 +251,11 @@ sin red real):
 Sin cambios en la base de datos.
 
 ## 11. Preguntas abiertas / a resolver en implementación
-1. Forma exacta de la respuesta de `register_transaction_store` (campo del token) — confirmar
-   contra sandbox.
-2. **FEL:** ¿la página alojada generada por la API ofrece el formulario de facturación al cliente?
-   Verificar en sandbox (§3.5). Determina si la automatización reemplaza del todo al panel.
+1. ~~Forma exacta de la respuesta de `register_transaction_store`~~ — **resuelto (2026-07-03):**
+   token en `data.token`. Ver §3.5.
+2. **FEL (bloqueante para reemplazar el panel):** la prueba en sandbox mostró `"facturar":false`
+   y ningún parámetro candidato lo activó (§3.5). Falta confirmar con QPayPro si el endpoint
+   respeta la FEL (parámetro o herencia de cuenta) y/o probar en producción con QpayFel activo.
 3. Qué páginas exactas montan `render_seccion_mensaje_cobro` y qué datos del cliente
    (teléfono/correo/ID) tienen disponibles en cada una.
 4. Valor del método de pago a registrar cuando se usa link: hoy la UI usa "Tarjeta"; existe el
