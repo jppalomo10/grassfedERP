@@ -29,11 +29,17 @@ en el mensaje, eliminando el paso manual del panel.
 - Manejo de errores que nunca tumba la página y deja el campo manual como respaldo.
 - Configuración de credenciales y entorno (sandbox/producción) vía secrets.
 - Pruebas unitarias del cliente.
+- **Verificación en sandbox** de si la página de pago alojada que genera la API ofrece el
+  formulario de **facturación electrónica (FEL)** para que el cliente ingrese sus datos, tal
+  como hoy sucede con los links del panel (ver §3.5).
 
 ### Fuera (v1) — explícitamente no se hace
 - **Conciliación automática de pagos** (marcar el pedido como Pagado cuando el cliente paga).
   Requiere recibir callbacks/webhooks de QPayPro; el ERP no está diseñado para exponer endpoints.
   La confirmación de pago sigue siendo manual, como hoy.
+- **Emisión de FEL desde el ERP vía la API `QpayFel`** (comercio factura por transacción con
+  `nit_cui`/`email`). Es un flujo distinto al actual (el cliente ya no ingresaría sus propios
+  datos) y queda fuera de v1. Ver §3.5.
 - Consultar estado del pago desde el ERP (`get_transaction_detail`).
 - Persistir el token o el link en la base de datos.
 - Página dedicada de "cobros sueltos" sin pedido (enfoque C descartado para v1).
@@ -58,6 +64,24 @@ en el mensaje, eliminando el paso manual del panel.
    exactitud en qué campo viene el token de `register_transaction_store`. Por eso se construye con
    toggle de sandbox y la primera prueba real contra sandbox confirma el parsing antes de producción
    (ver §5 y §8).
+
+### 3.5 Facturación electrónica (FEL): comportamiento a verificar
+Hoy el operador, al crear un link en el panel, habilita la FEL para que **el propio cliente**
+ingrese sus datos de facturación en la página de pago y se genere la factura automáticamente.
+
+La documentación de `register_transaction_store` **no expone un parámetro** para habilitar esa
+FEL. Hay dos hipótesis y no se puede saber cuál aplica sin probar:
+1. La página alojada **hereda** la configuración FEL del comercio (si la cuenta tiene QpayFel
+   activo, el formulario de facturación aparece solo en todos los links). — Plausible, sin confirmar.
+2. El switch es **por-link y solo del panel**, y los links de la API no traen FEL.
+
+**Decisión (acordada):** se construye la generación del link y se **verifica empíricamente en
+sandbox** si la página alojada ofrece el formulario de facturación. Según el resultado:
+- Si **sí** aparece (hipótesis 1): objetivo cumplido, sin trabajo extra.
+- Si **no** aparece: es un hallazgo, no un fracaso del diseño. Se documenta y se decide en una
+  fase posterior (p. ej. preguntar a QPayPro por un parámetro no documentado, o evaluar emitir la
+  FEL con la API `QpayFel` del lado del comercio — fuera de v1). Mientras tanto, para los pedidos
+  que requieran factura, el operador puede seguir creando el link en el panel como hoy.
 
 ## 4. Arquitectura
 
@@ -92,11 +116,13 @@ Sin dependencias de Streamlit ni de la base de datos.
   - `x_phone` ← teléfono del cliente (PK en `Clientes`), sanitizado a solo dígitos.
   - `x_email` ← correo del cliente si existe; si no, un correo de relleno configurable
     (p. ej. `cf@grassfedgt.com`).
-  - `x_description` ← `"Pedido {ID_Pedido}"` (o `"Pedido GrassFed GT"` si aún no hay ID).
+  - `x_description` ← `"{nombre} # {ID_Pedido}"` — replica la convención que el operador usa
+    hoy en el panel (`NOMBRE # PEDIDO`). Si aún no hay `ID_Pedido`, se omite el sufijo.
   - `x_invoice_num` ← `ID_Pedido` como string, si está disponible.
-  - `products` ← una sola línea con el arreglo JSON escapado que exige la API
-    (`[["Pedido GrassFed GT","{total}","","1","0","1"]]`). Se cubre con test por su formato
-    delicado.
+  - `products` ← una sola línea con el arreglo JSON escapado que exige la API, usando el nombre
+    de producto que el operador usa hoy: `"Caja surtida de carne de pastoreo"`
+    (`[["Caja surtida de carne de pastoreo","{total}","","1","0","1"]]`). El nombre del producto
+    es configurable. Se cubre con test por su formato delicado.
   - `store_type` ← `"hostedpage"`.
   - `x_url_success` / `x_url_error` / `x_url_cancel` ← configurables; por defecto vacíos (QPayPro
     usa las URLs configuradas en el comercio).
@@ -210,8 +236,10 @@ Sin cambios en la base de datos.
 ## 11. Preguntas abiertas / a resolver en implementación
 1. Forma exacta de la respuesta de `register_transaction_store` (campo del token) — confirmar
    contra sandbox.
-2. Qué páginas exactas montan `render_seccion_mensaje_cobro` y qué datos del cliente
+2. **FEL:** ¿la página alojada generada por la API ofrece el formulario de facturación al cliente?
+   Verificar en sandbox (§3.5). Determina si la automatización reemplaza del todo al panel.
+3. Qué páginas exactas montan `render_seccion_mensaje_cobro` y qué datos del cliente
    (teléfono/correo/ID) tienen disponibles en cada una.
-3. Valor del método de pago a registrar cuando se usa link: hoy la UI usa "Tarjeta"; existe el
+4. Valor del método de pago a registrar cuando se usa link: hoy la UI usa "Tarjeta"; existe el
    enum `Pagos = 'Link'` sin uso. Decisión menor, se resuelve en implementación (v1 no cambia la
    BD, así que no bloquea).
