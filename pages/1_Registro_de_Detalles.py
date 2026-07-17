@@ -445,6 +445,8 @@ if st.session_state.lineas:
         total=total_pedido,
         metodo_pago=metodo_pago,
         key_prefix="reg_msg",
+        # ID previsto (MAX+1), mismo criterio que la factura PDF de abajo.
+        id_pedido=get_next_id_pedido(),
     )
 
 # ── Botones ──────────────────────────────────────────────────────────

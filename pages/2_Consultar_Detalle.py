@@ -403,6 +403,7 @@ render_seccion_mensaje_cobro(
     total=float(pedido["Total"]),
     metodo_pago=nuevo_pago,
     key_prefix=f"cons_msg_{factura_sel}",
+    id_pedido=factura_sel,
 )
 
 # ── Indicadores visuales de estado ───────────────────────────────────
