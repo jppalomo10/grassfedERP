@@ -110,10 +110,17 @@ def test_payload_products_incluye_nombre_producto_y_monto():
         nombre="JOSE PEREZ", telefono="12345678", total=535.0,
         id_pedido=1, config=CONFIG,
     )
-    # products es un arreglo JSON escapado (string).
+    # products es un arreglo JSON escapado (string). Posiciones confirmadas
+    # empíricamente contra sandbox (2026-07-17): el checkout interpreta
+    # [nombre, id, imagen, cantidad, PRECIO, ...] — el precio va en la
+    # posición 4, NO en la 1 como sugiere el ejemplo de la doc (la página
+    # mostraba Q1.00 en vez del total cuando iba en la posición 1).
     productos = json.loads(p["products"])
     assert productos[0][0] == "Caja surtida de carne de pastoreo"
-    assert productos[0][1] == "535.00"
+    assert productos[0][3] == "1"        # cantidad
+    assert productos[0][4] == "535.00"   # precio unitario
+    # La posición 1 (id de producto) NO debe llevar el monto.
+    assert productos[0][1] != "535.00"
 
 
 def test_payload_nombre_producto_configurable():

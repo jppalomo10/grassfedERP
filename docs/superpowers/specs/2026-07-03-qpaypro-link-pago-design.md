@@ -1,7 +1,8 @@
 # Generación de links de pago QPayPro para cobro por WhatsApp
 
-> **Estado:** diseño aprobado, pendiente de plan de implementación.
-> **Fecha:** 2026-07-03.
+> **Estado:** implementado el generador vía API interna del panel (ver Actualización
+> 2026-07-17 al final); pendiente la integración en la UI del mensaje de cobro.
+> **Fecha:** 2026-07-03 (actualizado 2026-07-17).
 > **Contexto del ERP:** ver `CONTEXTO_ACTUAL_ERP.md`. App interna Streamlit + Python +
 > PostgreSQL/Supabase, hosteada en **Streamlit Cloud** con el **repositorio público en GitHub**.
 
@@ -261,3 +262,47 @@ Sin cambios en la base de datos.
 4. Valor del método de pago a registrar cuando se usa link: hoy la UI usa "Tarjeta"; existe el
    enum `Pagos = 'Link'` sin uso. Decisión menor, se resuelve en implementación (v1 no cambia la
    BD, así que no bloquea).
+
+---
+
+## 12. Actualización 2026-07-17 — pivote a la API interna del panel (implementado)
+
+La verificación en sandbox y las capturas del operador revelaron que los links que él crea
+a mano NO salen del endpoint documentado, sino del módulo **"Links de Pago"** del panel
+(`app.qpaypro.com`), que usa una API interna:
+
+```
+POST https://app.qpaypro.com/api/payment-links
+{ name, description ("NOMBRE # PEDIDO"), price, currency:"GTQ",
+  price_editable:false, quantity_edit:false, template:"1310",
+  infile:1  ← switch de la FEL, status:"active", ... }
+→ 201 { success, url: "https://payments.qpaypro.com/checkout/dK6w.../{id}" }
+```
+
+**Hallazgos que motivaron el pivote:**
+- El endpoint documentado (`register_transaction_store`) produce un checkout genérico
+  **sin FEL** (`facturar:false`, no activable por parámetro — se probaron ~22 candidatos)
+  y con botón "Modificar carretilla" (inofensivo: solo redirige a `x_url_cancel`).
+- Bug del endpoint documentado: interpreta `products` como `[nombre, id, imagen,
+  cantidad, PRECIO, ...]` — el precio va en la posición 4, no en la 1 como sugiere la doc
+  (mostraba Q1.00 en vez del total). Corregido en `qpaypro.py`, que queda como **plan C**.
+- La API del panel produce links **idénticos** a los manuales: mismo formato de URL,
+  plantilla GrassFed (1310), FEL (`infile:1` — verificada visualmente: sección "NIT o CUI"),
+  precio/cantidad no editables.
+
+**Autenticación (plan B implementado):** la API del panel usa sesión de navegador, no
+llaves de comercio. Se verificó que el login (`POST /login` con email/password) no tiene
+captcha ni 2FA, así que `qpaypro_panel.py` automatiza: login → sesión cacheada en la
+instancia → `POST /api/payment-links` → re-login automático ante 401/419. Credenciales en
+`[qpaypro_panel]` de secrets (email, password, template_id). **Probado de punta a punta
+contra la cuenta real** (2 links Q1.00 creados y verificados, sesión reusada entre llamadas).
+
+**Riesgos aceptados:** API interna no oficial (puede cambiar sin aviso) y contraseña
+completa del panel en secrets. Mitigación: el campo manual de link en la UI queda siempre
+como respaldo; si el panel agrega captcha/2FA se vuelve al flujo manual sin pérdida.
+
+**Módulos:** `qpaypro_panel.py` (payload puro + `ClientePanel` con login/reintento;
+13 pruebas en `tests/test_qpaypro_panel.py`) y `qpaypro.py` (plan C, 27 pruebas).
+
+**Pendiente:** integración del botón "Generar link de pago" en `ui_mensajes.py` (§4.3),
+usando `ClientePanel` cacheado en `st.session_state`.

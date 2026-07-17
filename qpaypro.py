@@ -79,7 +79,11 @@ def construir_payload(nombre, telefono, total, id_pedido=None, correo="", *, con
         descripcion = nombre_limpio
         invoice_num = ""
 
-    products = json.dumps([[nombre_producto, monto, "", "1", "1", "1"]])
+    # Posiciones confirmadas contra sandbox (la doc es engañosa):
+    # [nombre, id, imagen, cantidad, precio_unitario, ¿flag?]
+    # El checkout toma el precio de la posición 4; si el monto va en la 1,
+    # la página muestra Q1.00 y cobraría mal.
+    products = json.dumps([[nombre_producto, "1", "", "1", monto, "1"]])
 
     return {
         "x_login": config["x_login"],
